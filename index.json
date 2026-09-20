@@ -1,5 +1,59 @@
 {
   "apiVersion": 1,
-  "updated": "2026-09-20T15:13:43Z",
-  "plugins": []
+  "updated": "2026-09-20T21:55:27Z",
+  "plugins": [
+    {
+      "id": "agent-rest-client",
+      "name": "Agent Rest Client",
+      "version": "0.1.0",
+      "publisher": "Agentty",
+      "description": "Send HTTP requests and read the response without leaving Agentty: method, URL, headers and body, with the status, time and size of what comes back.",
+      "icon": "globe",
+      "license": "GPL-3.0-or-later",
+      "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/agent-rest-client",
+      "homepage": "https://agentty.run",
+      "keywords": [
+        "http",
+        "rest",
+        "api",
+        "client",
+        "rust",
+        "wasm"
+      ],
+      "surface": "sidebar",
+      "mode": "push",
+      "permissions": [
+        "net.request"
+      ],
+      "module": {
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-0.1.0.wasm",
+        "sha256": "6a8d2fee17cf7c2934860e0bc7c1611939490778a7d445a859ad1644c9668e5f",
+        "size": 167613
+      }
+    },
+    {
+      "id": "hello-rust",
+      "name": "Hello Rust",
+      "version": "0.1.0",
+      "publisher": "Agentty",
+      "description": "Hello world for Agentty's WebAssembly plugins: a Rust program that draws a panel in the sidebar and asks for no permissions.",
+      "icon": "sparkles",
+      "license": "GPL-3.0-or-later",
+      "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/hello-rust",
+      "homepage": "https://agentty.run",
+      "keywords": [
+        "example",
+        "rust",
+        "wasm"
+      ],
+      "surface": "sidebar",
+      "mode": "push",
+      "permissions": [],
+      "module": {
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/hello-rust-0.1.0.wasm",
+        "sha256": "768ac7e0207a0d014ea5584993c177bb81616dc487c955a6b463187092d5c6ea",
+        "size": 93439
+      }
+    }
+  ]
 }

@@ -11,6 +11,19 @@ Plugins that run as a program (`node`, `python`, an executable) have everything 
 installs those from a folder or a Git repository, where the person doing it chose the source
 themselves; they are not offered here.
 
+## Building the plugins published here
+
+`src/` holds the plugins this repository publishes, written against `sdk/rust`.
+
+```sh
+./scripts/build-plugins.sh      # builds every plugin in src/ into modules/, with checksums
+python3 scripts/validate.py --index
+```
+
+Each writes `modules/<id>-<version>.wasm`; the entry in `plugins/<id>.json` names that file, its
+checksum and its size. Raising a version means a new file beside the old one, so an entry always
+points at the bytes it was reviewed with.
+
 ## Steps
 
 1. **Build and publish the module.**

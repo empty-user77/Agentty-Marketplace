@@ -3,6 +3,10 @@
 The list of plugins Agentty offers in **Plugins → Marketplace**. One file per plugin, added by a
 pull request, checked by CI, and read by Agentty as `index.json`.
 
+It also holds the **Rust SDK** for writing a plugin (`sdk/rust`) and the **plugins Agentty itself
+publishes** (`src/`), which are built here and served from `modules/`. Those used to ship inside
+Agentty; they are here now, on the same footing as everyone else's.
+
 A plugin here is **a WebAssembly module with its source in the open**. That is the whole rule, and
 both halves matter:
 
@@ -13,6 +17,20 @@ both halves matter:
   decide for themselves.
 - **Source in the open**, because the module here is a binary. Anyone can read what it is built
   from, and build it again.
+
+## What is where
+
+| | |
+|---|---|
+| `plugins/<id>.json` | one entry per plugin — what Agentty reads |
+| `index.json` | every entry, rebuilt by `scripts/validate.py --index` |
+| `sdk/rust/` | the Rust SDK a plugin is written against |
+| `src/<id>/` | the plugins published from this repository |
+| `modules/<id>-<version>.wasm` | their built modules, which their entries point at |
+| `scripts/validate.py` | the checks; `scripts/build-plugins.sh` builds everything in `src/` |
+
+A plugin of your own does not go in `src/`: it lives in your repository, and only its entry comes
+here.
 
 ## Submitting a plugin
 
