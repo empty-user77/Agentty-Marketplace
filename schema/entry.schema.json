@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/empty-user77/Agentty-Marketplace/schema/entry.schema.json",
+  "title": "Agentty marketplace entry",
+  "description": "One plugin offered in Agentty's Plugins page. scripts/validate.py checks more than this schema can say.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "description", "publisher", "license", "source", "module"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.-]+)?$" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "publisher": { "type": "string", "minLength": 1, "maxLength": 60 },
+    "license": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "source": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
+    "icon": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+    "keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 30 } },
+    "surface": { "enum": ["sidebar", "pane", "status"] },
+    "mode": { "enum": ["push", "overlay", "window", "full"] },
+    "permissions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read"] }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "sha256", "size"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^https://" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+      }
+    }
+  }
+}

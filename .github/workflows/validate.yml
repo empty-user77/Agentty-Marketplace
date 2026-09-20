@@ -1,0 +1,33 @@
+name: Validate
+
+# Every pull request is someone asking Agentty to offer their plugin to everyone: the entry is
+# checked, and the module behind it is downloaded and weighed against the checksum in the entry.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  entries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: The checks themselves still work
+        run: python3 -m unittest discover -s scripts -q
+      - name: Every entry
+        run: python3 scripts/validate.py
+      # Only on a pull request: on main the modules were fetched when the entry landed, and a
+      # release that disappears later should not turn the whole list red.
+      - name: Every module, against its checksum
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/validate.py --download
+      - name: index.json matches the entries
+        run: |
+          python3 scripts/validate.py --index
+          git diff --exit-code index.json || {
+            echo "::error::index.json is out of date - run: python3 scripts/validate.py --index"
+            exit 1
+          }
