@@ -1,9 +1,9 @@
 {
   "id": "agent-rest-client",
   "name": "Agent Rest Client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "Agentty",
-  "description": "Send HTTP requests and read the response without leaving Agentty: method, URL, headers and body, with the status, time and size of what comes back.",
+  "description": "Send HTTP requests and read the response without leaving Agentty: method, URL, headers, body and authorization, environments whose values fill in {{placeholders}}, saved requests, a proxy, and the request as a cURL command.",
   "icon": "globe",
   "runtime": "wasm",
   "main": "agent-rest-client.wasm",

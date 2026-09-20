@@ -80,6 +80,7 @@ and pick the folder. **Restart** on the plugin's page picks up a new build.
 |---|---|
 | `set_panel(tree)` · `show_panel()` | the panel, built with `ui::` |
 | `notify_user(kind, message)` · `set_badge(text)` | a toast, and up to 8 characters on the icon |
+| `copy(text)` | puts text on the clipboard |
 | `log(line)` | the plugin's log on the Plugins page |
 | `open_url(url)` | a page in the user's browser |
 | `fetch(request)` | an HTTP request — needs `net.request` |

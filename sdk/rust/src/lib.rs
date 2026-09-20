@@ -155,6 +155,12 @@ impl Host {
         self.notify("ui/setBadge", json!({ "text": text.into() }));
     }
 
+    /// Puts text on the clipboard — what a "copy this" button in a panel does. Up to 100,000
+    /// characters; anything longer is cut.
+    pub fn copy(&self, text: impl Into<String>) {
+        self.notify("host/copy", json!({ "text": text.into() }));
+    }
+
     /// Opens a page in the user's browser.
     pub fn open_url(&self, url: impl Into<String>) {
         self.notify("host/openUrl", json!({ "url": url.into() }));

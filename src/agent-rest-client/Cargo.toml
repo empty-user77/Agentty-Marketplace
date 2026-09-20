@@ -1,6 +1,6 @@
 [package]
 name = "agent-rest-client"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Postman-style REST client for Agentty, written in Rust and run as WebAssembly"

@@ -177,6 +177,34 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+/// A shell argument, quoted the way a shell wants it: single quotes, and the one way out of them.
+fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
+/// What the current request looks like as a `curl` command — the same headers, the same body, the
+/// same proxy, with the environment's values already filled in.
+fn as_curl(method: &str, url: &str, headers: &[(String, String)], body: &str, proxy: &str) -> String {
+    let mut parts = vec!["curl".to_string()];
+    if method != "GET" {
+        parts.push(format!("-X {method}"));
+    }
+    for (name, value) in headers {
+        if name.trim().is_empty() {
+            continue;
+        }
+        parts.push(format!("-H {}", shell_quote(&format!("{}: {value}", name.trim()))));
+    }
+    if !proxy.trim().is_empty() {
+        parts.push(format!("--proxy {}", shell_quote(proxy.trim())));
+    }
+    if !body.trim().is_empty() {
+        parts.push(format!("--data {}", shell_quote(body)));
+    }
+    parts.push(shell_quote(url));
+    parts.join(" \\\n  ")
+}
+
 fn cut(text: &str, limit: usize) -> String {
     match text.chars().count() > limit {
         true => format!("{}…", text.chars().take(limit).collect::<String>()),
@@ -338,6 +366,7 @@ impl AgentRestClient {
         children.push(ui::row(vec![
             ui::styled_button("send", if self.pending.is_some() { "Sending…" } else { "Send" }, "primary"),
             ui::button("save", "Save"),
+            ui::button("curl", "Copy as cURL"),
         ]));
         children.push(ui::input("name", "Name to save it under", self.name.clone()));
 
@@ -392,6 +421,7 @@ impl AgentRestClient {
             if outcome.pretty.is_some() {
                 row.push(ui::toggle("response.pretty", "Pretty", self.pretty));
             }
+            row.push(ui::button("response.copy", "Copy response"));
             children.push(ui::row(row));
             if self.show_response_headers {
                 let items: Vec<Value> =
@@ -573,6 +603,39 @@ impl AgentRestClient {
                 None => host.notify_user("warning", "That body is not JSON"),
             },
             ["body", "clear"] => self.request.body.clear(),
+            ["curl"] => {
+                let values = self.env_values();
+                let mut missing = Vec::new();
+                let mut headers: Vec<(String, String)> = self
+                    .request
+                    .headers
+                    .iter()
+                    .map(|(name, value)| (substitute(name, &values, &mut missing), substitute(value, &values, &mut missing)))
+                    .collect();
+                if let Some(auth) = self.auth_header(&values, &mut missing) {
+                    headers.push(auth);
+                }
+                let command = as_curl(
+                    &self.request.method(),
+                    &substitute(self.request.url.trim(), &values, &mut missing),
+                    &headers,
+                    &substitute(&self.request.body, &values, &mut missing),
+                    &substitute(&self.settings.proxy, &values, &mut missing),
+                );
+                host.copy(command);
+                host.notify_user("success", "Copied the request as a cURL command");
+                return true;
+            }
+            ["response", "copy"] => {
+                let Some(outcome) = &self.outcome else { return true };
+                let body = match (&outcome.pretty, self.pretty) {
+                    (Some(pretty), true) => pretty.clone(),
+                    _ => outcome.body.clone(),
+                };
+                host.copy(body);
+                host.notify_user("success", "Copied the response body");
+                return true;
+            }
             ["response", "pretty"] => self.pretty = event.is_on(),
             ["response", "headers"] => self.show_response_headers = event.is_on(),
             ["history"] => {
@@ -820,6 +883,28 @@ mod tests {
         assert!(body_note("{\n  \"a\": 1\n}").unwrap().starts_with("3 lines"));
         assert_eq!(pretty_json("{\"a\":1}").as_deref(), Some("{\n  \"a\": 1\n}"));
         assert!(pretty_json("not json").is_none());
+    }
+
+    #[test]
+    fn a_request_becomes_a_curl_command() {
+        let headers = vec![("Accept".to_string(), "application/json".to_string())];
+        let command = as_curl("POST", "https://api.example.com/things", &headers, "{\"a\":1}", "");
+        assert!(command.starts_with("curl \\\n  -X POST"));
+        assert!(command.contains("-H 'Accept: application/json'"));
+        assert!(command.contains("--data '{\"a\":1}'"));
+        assert!(command.ends_with("'https://api.example.com/things'"));
+        // A GET needs no -X, and a proxy comes along when there is one.
+        let plain = as_curl("GET", "https://api.example.com", &[], "", "http://127.0.0.1:8888");
+        assert!(!plain.contains("-X"));
+        assert!(plain.contains("--proxy 'http://127.0.0.1:8888'"));
+    }
+
+    #[test]
+    fn a_quote_in_a_value_cannot_end_the_quoting() {
+        // The one thing that would let a value become a command of its own.
+        assert_eq!(shell_quote("it's"), "'it'\\''s'");
+        let command = as_curl("GET", "https://x.example/'; rm -rf /; echo '", &[], "", "");
+        assert!(command.ends_with("'https://x.example/'\\''; rm -rf /; echo '\\'''"), "{command}");
     }
 
     #[test]
