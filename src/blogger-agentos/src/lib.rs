@@ -8,6 +8,7 @@
 //! What a real AgentOS adds to this is better prompts, not more code.
 
 use agentty_plugin::agentos::{self, Approval, Machine, Step, Workflow};
+use agentty_plugin::text::t;
 use agentty_plugin::{export_plugin, Host, PaneStatus, Plugin, UiEvent};
 use serde_json::Value;
 
@@ -83,13 +84,14 @@ static BLOGGER: Workflow = Workflow {
     id: "blogger",
     title: "Blog post",
     agent: Some("claude"),
+    label: ["Blog post", "블로그 글", "ブログ記事", "博客文章"],
     glossary: &[],
     steps: &[
-        Step { id: "outline", title: "Outline", prompt: OUTLINE, check: has_headings, approval: Approval::Auto },
-        Step { id: "draft", title: "Draft", prompt: DRAFT, check: long_enough, approval: Approval::Auto },
+        Step { id: "outline", title: ["Outline", "개요", "アウトライン", "大纲"], prompt: OUTLINE, check: has_headings, approval: Approval::Auto },
+        Step { id: "draft", title: ["Draft", "초고", "下書き", "初稿"], prompt: DRAFT, check: long_enough, approval: Approval::Auto },
         // The runner makes this one ask anyway — it is what the step after it writes to disk.
-        Step { id: "edit", title: "Edit", prompt: EDIT, check: no_placeholders, approval: Approval::Ask },
-        Step { id: "save", title: "Save", prompt: READY, check: names_a_file, approval: Approval::Ask },
+        Step { id: "edit", title: ["Edit", "다듬기", "推敲", "润色"], prompt: EDIT, check: no_placeholders, approval: Approval::Ask },
+        Step { id: "save", title: ["Save", "저장", "保存", "保存"], prompt: READY, check: names_a_file, approval: Approval::Ask },
     ],
 };
 
@@ -107,7 +109,9 @@ impl Default for Blogger {
 
 impl Blogger {
     fn draw(&self, host: &Host) {
-        host.set_panel(agentos::panel(&self.machine, &self.typed, "What is the post about?"));
+        let lang = host.language();
+        let ask = t(lang, ["What is the post about?", "무엇에 대한 글인가요?", "何についての記事ですか？", "这篇文章写什么？"]);
+        host.set_panel(agentos::panel_in(&self.machine, &self.typed, ask, lang));
     }
 
     fn keep(&self, host: &Host) {

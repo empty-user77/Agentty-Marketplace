@@ -18,8 +18,8 @@
 //!     title: "Blog post",
 //!     agent: Some("claude"),
 //!     steps: &[
-//!         Step { id: "outline", title: "Outline", prompt: OUTLINE, check: has_sections, approval: Approval::Auto },
-//!         Step { id: "draft", title: "Draft", prompt: DRAFT, check: long_enough, approval: Approval::Ask },
+//!         Step { id: "outline", title: ["Outline", "", "", ""], prompt: OUTLINE, check: has_sections, approval: Approval::Auto },
+//!         Step { id: "draft", title: ["Draft", "", "", ""], prompt: DRAFT, check: long_enough, approval: Approval::Ask },
 //!     ],
 //! };
 //! ```
@@ -65,7 +65,9 @@ pub enum Approval {
 /// One step: what to ask an agent, and what must be true of the answer.
 pub struct Step {
     pub id: &'static str,
-    pub title: &'static str,
+    /// What the user sees this step called, in `[English, 한국어, 日本語, 中文]`. A language left
+    /// empty reads English, so a workflow can be written in one language and gain the others.
+    pub title: [&'static str; 4],
     /// The skill — what this step asks an agent to do. English, like every prompt that ships in
     /// code; the prompt itself tells the agent which language to write in.
     ///
@@ -81,7 +83,12 @@ pub struct Step {
 /// A trade, as steps.
 pub struct Workflow {
     pub id: &'static str,
+    /// What the session this workflow runs in is called. English: an agent reads it, and so does
+    /// the plugin, to tell its own sessions apart from anyone else's.
     pub title: &'static str,
+    /// What the user sees the workflow called, in `[English, 한국어, 日本語, 中文]`. Empty
+    /// throughout means [`Workflow::title`].
+    pub label: [&'static str; 4],
     /// `claude`, `codex`, or `None` for whatever Agentty starts by default.
     pub agent: Option<&'static str>,
     /// Pieces of prompt several steps share, as `(name, text)`. `{name}` in any step's prompt is
@@ -90,6 +97,18 @@ pub struct Workflow {
     /// that forgets is the one that does something nobody wanted.
     pub glossary: &'static [(&'static str, &'static str)],
     pub steps: &'static [Step],
+}
+
+impl Step {
+    /// What to call this step to the user.
+    pub fn label(&self, lang: crate::text::Lang) -> &'static str {
+        let label = crate::text::t(lang, self.title);
+        if label.is_empty() {
+            self.id
+        } else {
+            label
+        }
+    }
 }
 
 impl Workflow {
@@ -124,6 +143,16 @@ impl Workflow {
 
     fn step(&self, index: usize) -> Option<&'static Step> {
         self.steps.get(index)
+    }
+
+    /// What to call this workflow to the user.
+    pub fn label(&self, lang: crate::text::Lang) -> &'static str {
+        let label = crate::text::t(lang, self.label);
+        if label.is_empty() {
+            self.title
+        } else {
+            label
+        }
     }
 
     /// What a step's answer is followed by — with one Agentty insists on whatever the workflow
@@ -193,7 +222,10 @@ pub struct Run {
     /// then gives back whatever was there — which is how a step finishes on nothing.
     #[serde(default)]
     pub taken_up: bool,
-    /// What the user is told, in one line.
+    /// Why the run is where it is, when there is a reason worth keeping: what a check found
+    /// missing, what stopped it. English — it is what the plugin's log shows, and the panel puts
+    /// the step's own name in front of it in the language the user reads. Empty when the state
+    /// says everything.
     pub note: String,
     pub started_ms: i64,
 }
@@ -317,7 +349,7 @@ impl Machine {
     pub fn cancel(&mut self, host: &Host) {
         host.log(format!("{}: cancelled at step {}", self.flow.id, self.run.step));
         self.run.state = State::Idle;
-        self.run.note = "Stopped".to_string();
+        self.run.note.clear();
         self.waiting = Waiting::Nothing;
     }
 
@@ -412,7 +444,7 @@ impl Machine {
         self.waiting = Waiting::Prompt(id);
         self.run.state = State::Working;
         self.run.taken_up = false;
-        self.run.note = format!("{} — asked", step.title);
+        self.run.note.clear();
         host.log(format!("{}: {} sent", self.flow.id, step.id));
     }
 
@@ -443,7 +475,7 @@ impl Machine {
                 match self.flow.approval(self.run.step) {
                     Approval::Ask => {
                         self.run.state = State::Review;
-                        self.run.note = format!("{} — read it, then continue", step.title);
+                        self.run.note.clear();
                     }
                     Approval::Auto => self.advance(host),
                 }
@@ -451,13 +483,13 @@ impl Machine {
             Err(why) => {
                 self.run.tries += 1;
                 if self.run.tries >= MAX_TRIES {
-                    return self.stop(host, &format!("{}: {why}, after {MAX_TRIES} tries", step.title));
+                    return self.stop(host, &format!("{why}, after {MAX_TRIES} tries"));
                 }
                 let Some(pane) = self.run.pane else { return self.stop(host, "the session is gone") };
                 self.waiting = Waiting::Prompt(host.prompt_pane(pane, fix_prompt(&why)));
                 self.run.state = State::Fixing;
                 self.run.taken_up = false;
-                self.run.note = format!("{} — {why}", step.title);
+                self.run.note = why.clone();
                 host.log(format!("{}: {} sent back ({why})", self.flow.id, step.id));
             }
         }
@@ -474,7 +506,7 @@ impl Machine {
 
     fn finish(&mut self, host: &Host) {
         self.run.state = State::Done;
-        self.run.note = format!("{} — done", self.flow.title);
+        self.run.note.clear();
         self.waiting = Waiting::Nothing;
         host.log(format!("{}: done", self.flow.id));
     }
@@ -549,9 +581,17 @@ pub fn handle(machine: &mut Machine, host: &Host, event: &crate::UiEvent, typed:
 ///
 /// An AgentOS is free to draw its own instead — this is what it would have written.
 pub fn panel(machine: &Machine, typed: &str, prompt: &str) -> Value {
+    panel_in(machine, typed, prompt, crate::text::Lang::En)
+}
+
+/// [`panel`], in the language the user reads — `host.language()`. The words that are the panel's
+/// own are translated; the workflow's title, its steps' titles and the reason a run stopped are
+/// the plugin's, and are shown as it wrote them.
+pub fn panel_in(machine: &Machine, typed: &str, prompt: &str, lang: crate::text::Lang) -> Value {
+    use crate::text::t;
     use crate::ui;
     let run = machine.run();
-    let mut children = vec![ui::styled_text(machine.flow().title, "title")];
+    let mut children = vec![ui::styled_text(machine.flow().label(lang), "title")];
 
     let steps: Vec<Value> = machine
         .flow()
@@ -560,39 +600,59 @@ pub fn panel(machine: &Machine, typed: &str, prompt: &str) -> Value {
         .enumerate()
         .map(|(index, step)| {
             let (mark, tone) = match (index.cmp(&run.step), run.state) {
-                (std::cmp::Ordering::Less, _) => ("done", "success"),
-                (std::cmp::Ordering::Equal, State::Done) => ("done", "success"),
-                (std::cmp::Ordering::Equal, State::Stuck) => ("stopped", "error"),
-                (std::cmp::Ordering::Equal, State::Review) => ("to read", "warning"),
-                (std::cmp::Ordering::Equal, State::Idle) => ("next", "neutral"),
-                (std::cmp::Ordering::Equal, _) => ("running", "info"),
+                (std::cmp::Ordering::Less, _) => (t(lang, ["done", "완료", "完了", "完成"]), "success"),
+                (std::cmp::Ordering::Equal, State::Done) => (t(lang, ["done", "완료", "完了", "完成"]), "success"),
+                (std::cmp::Ordering::Equal, State::Stuck) => (t(lang, ["stopped", "멈춤", "停止", "已停止"]), "error"),
+                (std::cmp::Ordering::Equal, State::Review) => (t(lang, ["to read", "확인 필요", "要確認", "待查看"]), "warning"),
+                (std::cmp::Ordering::Equal, State::Idle) => (t(lang, ["next", "다음", "次", "下一步"]), "neutral"),
+                (std::cmp::Ordering::Equal, _) => (t(lang, ["running", "진행 중", "実行中", "进行中"]), "info"),
                 (std::cmp::Ordering::Greater, _) => ("", "neutral"),
             };
-            let mut row = vec![ui::text(step.title)];
+            let mut row = vec![ui::text(step.label(lang))];
             if !mark.is_empty() {
                 row.push(ui::badge(mark, tone));
             }
             ui::row(row)
         })
         .collect();
-    children.push(ui::section("Steps", steps));
+    children.push(ui::section(t(lang, ["Steps", "단계", "ステップ", "步骤"]), steps));
 
-    if !run.note.is_empty() {
+    // One line saying where the run is: what the state means, and the reason when there is one.
+    let step_now = machine.step().map(|step| step.label(lang));
+    let said = match (run.state, step_now) {
+        (State::Done, _) => t(lang, ["Done.", "완료했습니다.", "完了しました。", "已完成。"]).to_string(),
+        (State::Review, Some(step)) => {
+            format!("{step} — {}", t(lang, ["read it, then continue", "확인한 뒤 계속하세요", "確認してから続けてください", "查看后继续"]))
+        }
+        (State::Stuck, Some(step)) if !run.note.is_empty() => format!("{step} — {}", run.note),
+        (State::Stuck, Some(step)) => format!("{step} — {}", t(lang, ["stopped", "멈췄습니다", "停止しました", "已停止"])),
+        (State::Fixing, Some(step)) if !run.note.is_empty() => format!("{step} — {}", run.note),
+        (State::Working | State::Settling | State::Reading | State::Fixing, Some(step)) => {
+            format!("{step} — {}", t(lang, ["asked", "요청함", "依頼済み", "已请求"]))
+        }
+        _ => String::new(),
+    };
+    if !said.is_empty() {
         let style = match run.state {
             State::Stuck => "error",
             State::Done => "success",
             _ => "muted",
         };
-        children.push(ui::styled_text(&run.note, style));
+        children.push(ui::styled_text(said, style));
     }
     if run.state.is_busy() {
-        children.push(ui::spinner("the agent is working — its session is open beside this"));
+        children.push(ui::spinner(t(lang, [
+            "the agent is working — its session is open beside this",
+            "에이전트가 작업 중입니다 — 옆에 세션이 열려 있습니다",
+            "エージェントが作業中です — 隣にセッションが開いています",
+            "智能体正在工作 — 会话就在旁边",
+        ])));
     }
 
     // What the step that is waiting produced, so the user reads it before saying yes.
     if run.state == State::Review {
         if let Some(output) = machine.output() {
-            children.push(ui::section("What came back", vec![ui::styled_text(output, "body")]));
+            children.push(ui::section(t(lang, ["What came back", "결과", "返ってきたもの", "返回的内容"]), vec![ui::styled_text(output, "body")]));
         }
     }
 
@@ -600,22 +660,22 @@ pub fn panel(machine: &Machine, typed: &str, prompt: &str) -> Value {
     let buttons = match run.state {
         State::Idle => vec![
             ui::input(button::INPUT, prompt, typed),
-            ui::styled_button(button::START, "Start", "primary"),
+            ui::styled_button(button::START, t(lang, ["Start", "시작", "開始", "开始"]), "primary"),
         ],
         State::Review => vec![
-            ui::styled_button(button::CONTINUE, "Continue", "primary"),
-            ui::styled_button(button::RETRY, "Ask again", "secondary"),
-            ui::styled_button(button::CANCEL, "Stop", "ghost"),
+            ui::styled_button(button::CONTINUE, t(lang, ["Continue", "계속", "続ける", "继续"]), "primary"),
+            ui::styled_button(button::RETRY, t(lang, ["Ask again", "다시 요청", "もう一度依頼", "再问一次"]), "secondary"),
+            ui::styled_button(button::CANCEL, t(lang, ["Stop", "중지", "停止", "停止"]), "ghost"),
         ],
         State::Stuck => vec![
-            ui::styled_button(button::RETRY, "Try this step again", "primary"),
-            ui::styled_button(button::CANCEL, "Stop", "ghost"),
+            ui::styled_button(button::RETRY, t(lang, ["Try this step again", "이 단계 다시 시도", "このステップをやり直す", "重试该步骤"]), "primary"),
+            ui::styled_button(button::CANCEL, t(lang, ["Stop", "중지", "停止", "停止"]), "ghost"),
         ],
         State::Done => vec![
             ui::input(button::INPUT, prompt, typed),
-            ui::styled_button(button::AGAIN, "Run it again", "primary"),
+            ui::styled_button(button::AGAIN, t(lang, ["Run it again", "다시 실행", "もう一度実行", "再运行一次"]), "primary"),
         ],
-        _ => vec![ui::styled_button(button::CANCEL, "Stop", "ghost")],
+        _ => vec![ui::styled_button(button::CANCEL, t(lang, ["Stop", "중지", "停止", "停止"]), "ghost")],
     };
     children.push(ui::row(buttons));
     ui::column(children)
@@ -667,11 +727,12 @@ mod tests {
         id: "test",
         title: "Test Flow",
         agent: Some("claude"),
+        label: ["", "", "", ""],
         glossary: &[("rules", "be brief")],
         steps: &[
-            Step { id: "one", title: "One", prompt: "do one with {input}, {rules}", check: always_ok, approval: Approval::Auto },
-            Step { id: "two", title: "Two", prompt: "do two after {step.one}", check: needs_the_word, approval: Approval::Auto },
-            Step { id: "three", title: "Three", prompt: "finish {step.two}", check: always_ok, approval: Approval::Ask },
+            Step { id: "one", title: ["One", "", "", ""], prompt: "do one with {input}, {rules}", check: always_ok, approval: Approval::Auto },
+            Step { id: "two", title: ["Two", "", "", ""], prompt: "do two after {step.one}", check: needs_the_word, approval: Approval::Auto },
+            Step { id: "three", title: ["Three", "", "", ""], prompt: "finish {step.two}", check: always_ok, approval: Approval::Ask },
         ],
     };
 
@@ -679,10 +740,11 @@ mod tests {
         id: "bad",
         title: "Bad",
         agent: None,
+        label: ["", "", "", ""],
         glossary: &[],
         steps: &[
-            Step { id: "write", title: "Write", prompt: "write it", check: always_ok, approval: Approval::Auto },
-            Step { id: "post", title: "Post", prompt: "post it", check: always_ok, approval: Approval::Auto },
+            Step { id: "write", title: ["Write", "", "", ""], prompt: "write it", check: always_ok, approval: Approval::Auto },
+            Step { id: "post", title: ["Post", "", "", ""], prompt: "post it", check: always_ok, approval: Approval::Auto },
         ],
     };
 
@@ -690,8 +752,9 @@ mod tests {
         id: "one",
         title: "One",
         agent: None,
+        label: ["", "", "", ""],
         glossary: &[],
-        steps: &[Step { id: "post", title: "Post", prompt: "post it", check: always_ok, approval: Approval::Ask }],
+        steps: &[Step { id: "post", title: ["Post", "", "", ""], prompt: "post it", check: always_ok, approval: Approval::Ask }],
     };
 
     /// Three steps, the middle one marked `Auto` although it is the one before the last.
@@ -700,10 +763,11 @@ mod tests {
         id: "unused",
         title: "Unused",
         agent: None,
+        label: ["", "", "", ""],
         glossary: &[("rules", "…")],
         steps: &[
-            Step { id: "a", title: "A", prompt: "no names here", check: always_ok, approval: Approval::Auto },
-            Step { id: "b", title: "B", prompt: "nor here", check: always_ok, approval: Approval::Ask },
+            Step { id: "a", title: ["A", "", "", ""], prompt: "no names here", check: always_ok, approval: Approval::Auto },
+            Step { id: "b", title: ["B", "", "", ""], prompt: "nor here", check: always_ok, approval: Approval::Ask },
         ],
     };
 
@@ -711,11 +775,12 @@ mod tests {
         id: "sneaky",
         title: "Sneaky",
         agent: None,
+        label: ["", "", "", ""],
         glossary: &[],
         steps: &[
-            Step { id: "gather", title: "Gather", prompt: "gather", check: always_ok, approval: Approval::Auto },
-            Step { id: "draft", title: "Draft", prompt: "draft", check: always_ok, approval: Approval::Auto },
-            Step { id: "post", title: "Post", prompt: "post {step.draft}", check: always_ok, approval: Approval::Ask },
+            Step { id: "gather", title: ["Gather", "", "", ""], prompt: "gather", check: always_ok, approval: Approval::Auto },
+            Step { id: "draft", title: ["Draft", "", "", ""], prompt: "draft", check: always_ok, approval: Approval::Auto },
+            Step { id: "post", title: ["Post", "", "", ""], prompt: "post {step.draft}", check: always_ok, approval: Approval::Ask },
         ],
     };
 
@@ -723,10 +788,11 @@ mod tests {
         id: "same",
         title: "Same",
         agent: None,
+        label: ["", "", "", ""],
         glossary: &[],
         steps: &[
-            Step { id: "a", title: "A", prompt: "", check: always_ok, approval: Approval::Auto },
-            Step { id: "a", title: "A again", prompt: "", check: always_ok, approval: Approval::Ask },
+            Step { id: "a", title: ["A", "", "", ""], prompt: "", check: always_ok, approval: Approval::Auto },
+            Step { id: "a", title: ["A again", "", "", ""], prompt: "", check: always_ok, approval: Approval::Ask },
         ],
     };
 
@@ -895,7 +961,11 @@ mod tests {
         machine.answer(&host, read[0].0, &Ok(session_saying("still not")));
         assert_eq!(machine.run().state, State::Stuck);
         assert!(machine.run().note.contains("does not say DONE"), "{}", machine.run().note);
-        assert!(machine.run().note.starts_with("Two:"), "{}", machine.run().note);
+        assert!(machine.run().note.contains("after 3 tries"), "{}", machine.run().note);
+        // The step it stopped on is named where the user reads it, in their language.
+        let shown = panel_in(&machine, "", "", crate::text::Lang::Ko).to_string();
+        assert!(shown.contains("Two"), "the step is named: {shown}");
+        assert!(shown.contains("does not say DONE"), "and so is what it was missing");
         assert!(calls().is_empty(), "a run that gave up sends nothing more");
     }
 
@@ -1135,6 +1205,33 @@ mod tests {
         let tree = panel(&machine, "", "");
         assert_eq!(ids(&tree), vec![button::CONTINUE, button::RETRY, button::CANCEL]);
         assert!(tree.to_string().contains("DONE"), "what came back is on screen before it is approved");
+    }
+
+    #[test]
+    fn the_panel_is_in_the_language_the_user_reads() {
+        use crate::text::Lang;
+        let host = host();
+        let mut machine = Machine::new(&FLOW);
+
+        let korean = panel_in(&machine, "", "무엇에 대해?", Lang::Ko).to_string();
+        assert!(korean.contains("시작"), "the button is not translated");
+        assert!(korean.contains("단계"), "nor the heading");
+        assert!(korean.contains("무엇에 대해?"), "what the plugin wrote is left as it wrote it");
+        assert!(korean.contains("Test Flow"), "and so is the workflow's own title");
+
+        // Every language draws, and the default is English.
+        for lang in [Lang::En, Lang::Ko, Lang::Ja, Lang::Zh] {
+            let tree = panel_in(&machine, "", "", lang);
+            assert_eq!(ids(&tree), vec![button::INPUT, button::START], "{lang:?}");
+        }
+        assert_eq!(panel(&machine, "", ""), panel_in(&machine, "", "", Lang::En));
+
+        // And once a run is going, so are the words that only appear then.
+        machine.start(&host, "x");
+        let _ = calls();
+        let japanese = panel_in(&machine, "", "", Lang::Ja).to_string();
+        assert!(japanese.contains("停止"), "the only button there is");
+        assert!(japanese.contains("エージェントが作業中"), "nor the line under it");
     }
 
     #[test]

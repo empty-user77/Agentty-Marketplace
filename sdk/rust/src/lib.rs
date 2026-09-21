@@ -38,6 +38,7 @@ use serde_json::{json, Value};
 use std::cell::RefCell;
 
 pub mod agentos;
+pub mod text;
 pub mod ui;
 
 pub use serde_json;
@@ -203,6 +204,12 @@ impl Host {
     /// The last context Agentty sent (workspace, pane, language).
     pub fn context(&self) -> Value {
         self.context.borrow().clone()
+    }
+
+    /// The language the user reads. Agentty sends it with `initialize` and again whenever it
+    /// changes, so a panel drawn after this is in the language the rest of the app is in.
+    pub fn language(&self) -> text::Lang {
+        text::Lang::of(self.context.borrow().get("language").and_then(Value::as_str).unwrap_or("en"))
     }
 
     /// Replaces the panel with this UI tree.

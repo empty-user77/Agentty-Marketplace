@@ -3,7 +3,7 @@
   "name": "Blogger AgentOS",
   "version": "0.2.0",
   "publisher": "Agentty",
-  "description": "Writes a post in four steps — outline, draft, edit, save — by asking an agent you can watch, and checking what comes back before moving on.",
+  "description": "Writes a post in four steps \u2014 outline, draft, edit, save \u2014 by asking an agent you can watch, and checking what comes back before moving on.",
   "icon": "pencil",
   "license": "GPL-3.0-or-later",
   "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/blogger-agentos",
@@ -24,7 +24,7 @@
   ],
   "module": {
     "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/blogger-agentos-0.2.0.wasm",
-    "sha256": "a3cd1a011d84db0f31ec81664a50ee366f055a0b4da0a49607f6f320a6312a7a",
-    "size": 140758
+    "sha256": "04582279a999be0dd848387d8e60682f0f79c5254f53f6d6fb9db1f1ba21cab9",
+    "size": 145444
   }
 }

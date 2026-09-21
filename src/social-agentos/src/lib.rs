@@ -19,6 +19,7 @@
 //!   post while they look.
 
 use agentty_plugin::agentos::{self, Approval, Machine, State, Step, Workflow};
+use agentty_plugin::text::{t, Lang};
 use agentty_plugin::{export_plugin, ui, Host, PaneStatus, Plugin, UiEvent};
 use serde_json::Value;
 
@@ -288,12 +289,13 @@ static X_POST: Workflow = Workflow {
     id: "x-post",
     title: "Post to X",
     agent: Some("claude"),
+    label: ["Post to X", "X에 게시", "X に投稿", "发布到 X"],
     glossary: BROWSER_RULES,
     steps: &[
-        Step { id: "gather", title: "Read the room", prompt: GATHER_X, check: lists_posts, approval: Approval::Auto },
+        Step { id: "gather", title: ["Read the room", "분위기 읽기", "空気を読む", "了解风向"], prompt: GATHER_X, check: lists_posts, approval: Approval::Auto },
         // The runner makes this one ask whatever it says here: it is what gets posted.
-        Step { id: "draft", title: "Draft", prompt: DRAFT_X, check: fits_a_post, approval: Approval::Ask },
-        Step { id: "post", title: "Post it", prompt: POST_X, check: links_to_what_it_posted, approval: Approval::Ask },
+        Step { id: "draft", title: ["Draft", "초안", "下書き", "草稿"], prompt: DRAFT_X, check: fits_a_post, approval: Approval::Ask },
+        Step { id: "post", title: ["Post it", "게시", "投稿", "发布"], prompt: POST_X, check: links_to_what_it_posted, approval: Approval::Ask },
     ],
 };
 
@@ -301,11 +303,12 @@ static X_REPLY: Workflow = Workflow {
     id: "x-reply",
     title: "Reply on X",
     agent: Some("claude"),
+    label: ["Reply on X", "X에 답글", "X で返信", "在 X 回复"],
     glossary: BROWSER_RULES,
     steps: &[
-        Step { id: "find", title: "Find conversations", prompt: FIND_REPLIES, check: lists_posts, approval: Approval::Auto },
-        Step { id: "draft", title: "Draft replies", prompt: DRAFT_REPLIES, check: replies_that_fit, approval: Approval::Ask },
-        Step { id: "send", title: "Send them", prompt: SEND_REPLIES, check: links_to_what_it_posted, approval: Approval::Ask },
+        Step { id: "find", title: ["Find conversations", "대화 찾기", "会話を探す", "寻找对话"], prompt: FIND_REPLIES, check: lists_posts, approval: Approval::Auto },
+        Step { id: "draft", title: ["Draft replies", "답글 초안", "返信の下書き", "回复草稿"], prompt: DRAFT_REPLIES, check: replies_that_fit, approval: Approval::Ask },
+        Step { id: "send", title: ["Send them", "보내기", "送信", "发送"], prompt: SEND_REPLIES, check: links_to_what_it_posted, approval: Approval::Ask },
     ],
 };
 
@@ -313,11 +316,12 @@ static IG_CAPTION: Workflow = Workflow {
     id: "ig-caption",
     title: "Instagram caption",
     agent: Some("claude"),
+    label: ["Instagram caption", "인스타그램 캡션", "Instagram キャプション", "Instagram 文案"],
     glossary: BROWSER_RULES,
     steps: &[
-        Step { id: "research", title: "Read the account", prompt: RESEARCH_IG, check: actually_looked, approval: Approval::Auto },
-        Step { id: "caption", title: "Caption", prompt: CAPTION_IG, check: has_a_caption, approval: Approval::Ask },
-        Step { id: "save", title: "Save it", prompt: SAVE_IG, check: names_the_file, approval: Approval::Ask },
+        Step { id: "research", title: ["Read the account", "계정 살펴보기", "アカウントを見る", "了解账号"], prompt: RESEARCH_IG, check: actually_looked, approval: Approval::Auto },
+        Step { id: "caption", title: ["Caption", "캡션", "キャプション", "文案"], prompt: CAPTION_IG, check: has_a_caption, approval: Approval::Ask },
+        Step { id: "save", title: ["Save it", "저장", "保存", "保存"], prompt: SAVE_IG, check: names_the_file, approval: Approval::Ask },
     ],
 };
 
@@ -345,16 +349,17 @@ impl Default for Social {
 
 impl Social {
     fn draw(&self, host: &Host) {
+        let lang = host.language();
         let picker = ui::row(
             FLOWS
                 .iter()
                 .map(|flow| {
                     let chosen = flow.id == self.machine.flow().id;
-                    ui::styled_button(format!("flow.{}", flow.id), flow.title, if chosen { "primary" } else { "ghost" })
+                    ui::styled_button(format!("flow.{}", flow.id), flow.label(lang), if chosen { "primary" } else { "ghost" })
                 })
                 .collect(),
         );
-        let run = agentos::panel(&self.machine, &self.typed, prompt_for(self.machine.flow().id));
+        let run = agentos::panel_in(&self.machine, &self.typed, prompt_for(self.machine.flow().id, lang), lang);
         host.set_panel(ui::column(vec![picker, ui::divider(), run]));
     }
 
@@ -370,7 +375,16 @@ impl Social {
         }
         if let Some(caption) = self.machine.run().output.get("caption") {
             host.copy(caption.clone());
-            host.notify_user("success", "The caption is on the clipboard — attach the picture and paste it.");
+            let done = t(
+                host.language(),
+                [
+                    "The caption is on the clipboard — attach the picture and paste it.",
+                    "캡션을 클립보드에 복사했습니다 — 사진을 올리고 붙여 넣으세요.",
+                    "キャプションをクリップボードにコピーしました — 写真を添えて貼り付けてください。",
+                    "文案已复制到剪贴板 — 添加图片后粘贴即可。",
+                ],
+            );
+            host.notify_user("success", done);
             self.copied = true;
         }
     }
@@ -380,7 +394,16 @@ impl Social {
             return;
         }
         if self.machine.run().state.is_busy() {
-            return host.notify_user("warning", "This run is still going — stop it first.");
+            let busy = t(
+                host.language(),
+                [
+                    "This run is still going — stop it first.",
+                    "실행 중입니다 — 먼저 중지하세요.",
+                    "まだ実行中です — 先に停止してください。",
+                    "还在运行中 — 请先停止。",
+                ],
+            );
+            return host.notify_user("warning", busy);
         }
         self.machine = Machine::new(flow_by_id(id));
         self.copied = false;
@@ -389,11 +412,11 @@ impl Social {
     }
 }
 
-fn prompt_for(flow: &str) -> &'static str {
+fn prompt_for(flow: &str, lang: Lang) -> &'static str {
     match flow {
-        "x-reply" => "What should the replies be about?",
-        "ig-caption" => "What is the picture of?",
-        _ => "What should the post be about?",
+        "x-reply" => t(lang, ["What should the replies be about?", "무엇에 대해 답글을 달까요?", "何について返信しますか？", "针对什么内容回复？"]),
+        "ig-caption" => t(lang, ["What is the picture of?", "어떤 사진인가요?", "どんな写真ですか？", "这是什么图片？"]),
+        _ => t(lang, ["What should the post be about?", "무엇에 대해 게시할까요?", "何について投稿しますか？", "要发布什么内容？"]),
     }
 }
 
@@ -569,6 +592,40 @@ mod tests {
     fn a_step_that_posts_has_to_say_what_it_posted() {
         assert!(links_to_what_it_posted("Posted: https://x.com/me/status/1").is_ok());
         assert!(links_to_what_it_posted("Done.").is_err(), "a run must not end on a claim with nothing behind it");
+    }
+
+    #[test]
+    fn what_the_user_reads_is_in_their_language_and_what_an_agent_reads_is_not() {
+        for lang in [Lang::En, Lang::Ko, Lang::Ja, Lang::Zh] {
+            for flow in FLOWS {
+                assert!(!flow.label(lang).is_empty());
+                assert!(!prompt_for(flow.id, lang).is_empty());
+            }
+        }
+        assert_eq!(X_POST.label(Lang::Ko), "X에 게시");
+        assert_eq!(prompt_for("ig-caption", Lang::Ja), "どんな写真ですか？");
+        // Every step is named in every language, so the panel is never half translated.
+        for flow in FLOWS {
+            for step in flow.steps {
+                for lang in [Lang::En, Lang::Ko, Lang::Ja, Lang::Zh] {
+                    assert_ne!(step.label(lang), step.id, "{}/{} has no name in {lang:?}", flow.id, step.id);
+                }
+            }
+        }
+        // A workflow's own title names the session and is read by an agent: it stays English,
+        // like every prompt that ships in code. (An em dash is English; 한글 is not.)
+        fn english(text: &str) -> bool {
+            !text.chars().any(|c| matches!(c, '\u{1100}'..='\u{11ff}' | '\u{3040}'..='\u{9fff}' | '\u{ac00}'..='\u{d7af}'))
+        }
+        for flow in FLOWS {
+            assert!(english(flow.title), "{} is not English", flow.id);
+            for step in flow.steps {
+                assert!(english(step.prompt), "{}/{}'s prompt is not English", flow.id, step.id);
+            }
+        }
+        for (_, piece) in BROWSER_RULES {
+            assert!(english(piece), "the browser rules are not English");
+        }
     }
 
     #[test]
