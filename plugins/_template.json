@@ -9,6 +9,7 @@
   "source": "https://github.com/you/your-plugin",
   "homepage": "https://github.com/you/your-plugin",
   "keywords": ["example"],
+  "apiVersion": 1,
   "surface": "sidebar",
   "mode": "push",
   "permissions": [],

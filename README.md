@@ -60,6 +60,7 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
   "license": "MIT",
   "source": "https://github.com/you/agentty-hello-world",
   "keywords": ["example"],
+  "apiVersion": 1,
   "surface": "sidebar",
   "mode": "push",
   "permissions": [],
@@ -78,6 +79,7 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 | `publisher`, `license` | who made it, and under what licence |
 | `source` | the public repository the module is built from — **required** |
 | `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set |
+| `apiVersion` | the plugin protocol the module is built against; leave it out for `1`. Agentty tells anyone running an older version that they need to update, instead of installing something it cannot run |
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
 | `mode` | how its panel opens: `push` (default), `overlay`, `window` or `full` |
 | `permissions` | what it asks for — Agentty shows these before anyone installs it |
@@ -89,6 +91,10 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 
 Change `version`, `module.url`, `module.sha256` and `module.size` in your entry and open another
 pull request. Agentty offers the update to everyone who has it installed.
+
+If the new version uses something only a newer Agentty has, raise `apiVersion` with it. People on an
+older Agentty then keep the version they have and are told to update, instead of being handed a
+module their app cannot run.
 
 ## What gets a plugin refused
 

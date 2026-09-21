@@ -91,6 +91,16 @@ class Entries(unittest.TestCase):
             with self.assertRaises(validate.Problem):
                 check(bad)
 
+    def test_an_entry_says_which_protocol_it_is_built_against(self):
+        # Left out: the protocol that existed before the field did.
+        self.assertEqual(check(entry()).get("apiVersion", 1), 1)
+        self.assertEqual(check(entry(apiVersion=1))["apiVersion"], 1)
+
+    def test_a_protocol_agentty_does_not_speak_yet_is_refused(self):
+        for bad in [validate.PLUGIN_API_VERSION + 1, 0, -1, "1", 1.0, True, None]:
+            with self.assertRaises(validate.Problem):
+                check(entry(apiVersion=bad))
+
     def test_surfaces_and_modes_are_ones_agentty_has(self):
         with self.assertRaises(validate.Problem):
             check(entry(surface="everywhere"))
