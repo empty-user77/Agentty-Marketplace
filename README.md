@@ -75,7 +75,7 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 | Field | |
 |---|---|
 | `id` | 2–40 characters, `a-z 0-9 -`; the file is `plugins/<id>.json` |
-| `name`, `version`, `description` | shown in Agentty; `version` is `major.minor.patch` |
+| `name`, `version`, `description` | shown in Agentty; `version` is `major.minor.patch`, the name is up to 60 characters and the description up to 300 |
 | `publisher`, `license` | who made it, and under what licence |
 | `source` | the public repository the module is built from — **required** |
 | `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set |
@@ -83,14 +83,15 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
 | `mode` | how its panel opens: `push` (default), `overlay`, `window` or `full` |
 | `permissions` | what it asks for — Agentty shows these before anyone installs it |
-| `module.url` | `https://` on github.com; it must contain the version, so a release cannot be swapped underneath |
-| `module.sha256` | the module's checksum; Agentty refuses a download that does not match |
-| `module.size` | its size in bytes (8 MB at most) |
+| `module.url` | `https://` on `github.com`, `raw.githubusercontent.com` or `objects.githubusercontent.com`. Put the version in the path so a release cannot be swapped underneath — that is a convention, not something CI checks |
+| `module.sha256` | the module's checksum. Agentty refuses a download that does not match, and refuses bytes that are not a WebAssembly module even when it does |
+| `module.size` | its exact length in bytes, up to 8 MB. Not a ceiling: a download of any other length is refused, so this changes with every build |
 
 ## Updating a plugin
 
 Change `version`, `module.url`, `module.sha256` and `module.size` in your entry and open another
-pull request. Agentty offers the update to everyone who has it installed.
+pull request. `module.size` is the new module's exact length, not the old one's. Agentty offers
+the update to everyone who has it installed.
 
 If the new version uses something only a newer Agentty has, raise `apiVersion` with it. People on an
 older Agentty then keep the version they have and are told to update, instead of being handed a
