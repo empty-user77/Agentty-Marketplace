@@ -1,11 +1,11 @@
 {
   "apiVersion": 1,
-  "updated": "2026-09-21T18:26:17Z",
+  "updated": "2026-09-21T18:55:41Z",
   "plugins": [
     {
       "id": "agent-rest-client",
       "name": "Agent Rest Client",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "publisher": "Agentty",
       "description": "Send HTTP requests and read the response without leaving Agentty: method, URL, headers, body and authorization, environments whose values fill in {{placeholders}}, saved requests, a proxy, and the request as a cURL command.",
       "icon": "globe",
@@ -26,9 +26,9 @@
         "net.request"
       ],
       "module": {
-        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-0.2.0.wasm",
-        "sha256": "0a29010b3208a7b19d0c7f928241f374d783141a8eb30b56df4be62ac9a76195",
-        "size": 170385
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-0.3.0.wasm",
+        "sha256": "7c410f00446051969618a481e226c8dc3126f942be297f148b632939515b298a",
+        "size": 187565
       }
     },
     {

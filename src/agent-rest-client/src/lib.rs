@@ -6,6 +6,7 @@
 //! method, headers, sizes, redirects and time; what the plugin remembers goes through
 //! `storage/*`, which is its own folder under `plugin-data` and nothing else.
 
+use agentty_plugin::text::{t, Lang};
 use agentty_plugin::{export_plugin, ui, FetchRequest, Host, Plugin, UiEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,10 +21,25 @@ const MAX_ROWS: usize = 24;
 const METHODS: &[(&str, &str)] =
     &[("GET", "GET"), ("POST", "POST"), ("PUT", "PUT"), ("PATCH", "PATCH"), ("DELETE", "DELETE"), ("HEAD", "HEAD"), ("OPTIONS", "OPTIONS")];
 
-const VIEWS: &[(&str, &str)] =
-    &[("request", "Request"), ("environments", "Environments"), ("collection", "Collection"), ("settings", "Settings")];
+/// The tabs, and the kinds of authorization. The value on the left is the plugin's own and never
+/// changes; the label on the right is what the user reads.
+fn views(lang: Lang) -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("request", t(lang, ["Request", "요청", "リクエスト", "请求"])),
+        ("environments", t(lang, ["Environments", "환경", "環境", "环境"])),
+        ("collection", t(lang, ["Collection", "모음", "コレクション", "收藏"])),
+        ("settings", t(lang, ["Settings", "설정", "設定", "设置"])),
+    ]
+}
 
-const AUTH_KINDS: &[(&str, &str)] = &[("none", "No auth"), ("bearer", "Bearer token"), ("basic", "Basic"), ("header", "API key header")];
+fn auth_kinds(lang: Lang) -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("none", t(lang, ["No auth", "인증 없음", "認証なし", "无认证"])),
+        ("bearer", t(lang, ["Bearer token", "Bearer 토큰", "Bearer トークン", "Bearer 令牌"])),
+        ("basic", t(lang, ["Basic", "Basic", "Basic", "Basic"])),
+        ("header", t(lang, ["API key header", "API 키 헤더", "API キーヘッダー", "API 密钥头"])),
+    ]
+}
 
 /// What is kept between runs, one storage key each.
 const KEYS: &[&str] = &["request", "environments", "collection", "history", "settings"];
@@ -103,6 +119,8 @@ struct Outcome {
 
 #[derive(Default)]
 struct AgentRestClient {
+    /// What the user reads, so the panel is in the language the rest of the window is in.
+    lang: Lang,
     view: String,
     request: Request,
     environments: Vec<Environment>,
@@ -268,14 +286,14 @@ impl AgentRestClient {
 
     fn send(&mut self, host: &Host) {
         if self.pending.is_some() {
-            host.notify_user("info", "That request is still running");
+            host.notify_user("info", t(self.lang, ["That request is still running", "그 요청은 아직 진행 중입니다", "そのリクエストはまだ実行中です", "该请求仍在进行中"]));
             return;
         }
         let values = self.env_values();
         let mut missing = Vec::new();
         let url = substitute(self.request.url.trim(), &values, &mut missing);
         if url.is_empty() {
-            host.notify_user("warning", "Enter a URL first");
+            host.notify_user("warning", t(self.lang, ["Enter a URL first", "먼저 URL을 입력하세요", "先に URL を入力してください", "请先输入 URL"]));
             return;
         }
         let method = self.request.method();
@@ -299,7 +317,7 @@ impl AgentRestClient {
             fetch = fetch.timeout_ms(self.settings.timeout.min(60) * 1000);
         }
         if !missing.is_empty() {
-            host.notify_user("warning", format!("No value for {{{{{}}}}}", missing.join("}}, {{")));
+            host.notify_user("warning", format!("{} {{{{{}}}}}", t(self.lang, ["No value for", "값이 없습니다:", "値がありません:", "没有值："]), missing.join("}, {")));
         }
         self.outcome = None;
         self.message = format!("{method} {url}");
@@ -344,7 +362,7 @@ impl AgentRestClient {
     // -- panel ---------------------------------------------------------------------------
 
     fn draw(&self, host: &Host) {
-        let mut children = vec![ui::choice("view", VIEWS, self.view())];
+        let mut children = vec![ui::choice("view", &views(self.lang), self.view())];
         if !self.message.is_empty() {
             children.push(ui::styled_text(cut(&self.message, 300), "muted"));
         }
@@ -360,55 +378,55 @@ impl AgentRestClient {
 
     fn request_view(&self) -> Vec<Value> {
         let mut children = Vec::new();
-        let env = if self.active_env.is_empty() { "No environment".to_string() } else { format!("Environment: {}", self.active_env) };
+        let env = if self.active_env.is_empty() { t(self.lang, ["No environment", "환경 없음", "環境なし", "无环境"]).to_string() } else { format!("{}: {}", t(self.lang, ["Environment", "환경", "環境", "环境"]), self.active_env) };
         children.push(ui::row(vec![ui::choice("method", METHODS, self.request.method()), ui::badge(env, "info")]));
-        children.push(ui::input("url", "https://api.example.com/v1/things   ({{baseUrl}} works)", self.request.url.clone()));
+        children.push(ui::input("url", t(self.lang, ["https://api.example.com/v1/things   ({{baseUrl}} works)", "https://api.example.com/v1/things   ({{baseUrl}} 사용 가능)", "https://api.example.com/v1/things   （{{baseUrl}} が使えます）", "https://api.example.com/v1/things   （可用 {{baseUrl}}）"]), self.request.url.clone()));
         children.push(ui::row(vec![
-            ui::styled_button("send", if self.pending.is_some() { "Sending…" } else { "Send" }, "primary"),
-            ui::button("save", "Save"),
-            ui::button("curl", "Copy as cURL"),
+            ui::styled_button("send", if self.pending.is_some() { t(self.lang, ["Sending…", "보내는 중…", "送信中…", "发送中…"]) } else { t(self.lang, ["Send", "보내기", "送信", "发送"]) }, "primary"),
+            ui::button("save", t(self.lang, ["Save", "저장", "保存", "保存"])),
+            ui::button("curl", t(self.lang, ["Copy as cURL", "cURL로 복사", "cURL としてコピー", "复制为 cURL"])),
         ]));
-        children.push(ui::input("name", "Name to save it under", self.name.clone()));
+        children.push(ui::input("name", t(self.lang, ["Name to save it under", "저장할 이름", "保存する名前", "保存名称"]), self.name.clone()));
 
         let mut headers = Vec::new();
         for (index, (name, value)) in self.request.headers.iter().enumerate() {
             headers.push(ui::row(vec![
-                ui::input(format!("h.name.{index}"), "Header", name.clone()),
-                ui::input(format!("h.value.{index}"), "Value", value.clone()),
-                ui::styled_button(format!("h.del.{index}"), "Remove", "ghost"),
+                ui::input(format!("h.name.{index}"), t(self.lang, ["Header", "헤더", "ヘッダー", "标头"]), name.clone()),
+                ui::input(format!("h.value.{index}"), t(self.lang, ["Value", "값", "値", "值"]), value.clone()),
+                ui::styled_button(format!("h.del.{index}"), t(self.lang, ["Remove", "삭제", "削除", "移除"]), "ghost"),
             ]));
         }
-        headers.push(ui::button("h.add", "Add header"));
-        children.push(ui::section("Headers", headers));
+        headers.push(ui::button("h.add", t(self.lang, ["Add header", "헤더 추가", "ヘッダーを追加", "添加标头"])));
+        children.push(ui::section(t(self.lang, ["Headers", "헤더", "ヘッダー", "标头"]), headers));
 
         let auth = &self.request.auth;
         let kind = if auth.kind.is_empty() { "none".to_string() } else { auth.kind.clone() };
-        let mut auth_rows = vec![ui::choice("auth.kind", AUTH_KINDS, kind.clone())];
+        let mut auth_rows = vec![ui::choice("auth.kind", &auth_kinds(self.lang), kind.clone())];
         match kind.as_str() {
-            "bearer" => auth_rows.push(ui::input("auth.token", "Token   ({{token}} works)", auth.token.clone())),
+            "bearer" => auth_rows.push(ui::input("auth.token", t(self.lang, ["Token   ({{token}} works)", "토큰   ({{token}} 사용 가능)", "トークン   （{{token}} が使えます）", "令牌   （可用 {{token}}）"]), auth.token.clone())),
             "basic" => auth_rows
-                .push(ui::row(vec![ui::input("auth.user", "User", auth.user.clone()), ui::input("auth.password", "Password", auth.password.clone())])),
+                .push(ui::row(vec![ui::input("auth.user", t(self.lang, ["User", "사용자", "ユーザー", "用户"]), auth.user.clone()), ui::input("auth.password", t(self.lang, ["Password", "비밀번호", "パスワード", "密码"]), auth.password.clone())])),
             "header" => auth_rows.push(ui::row(vec![
-                ui::input("auth.header", "Header name (X-API-Key)", auth.header.clone()),
-                ui::input("auth.token", "Value", auth.token.clone()),
+                ui::input("auth.header", t(self.lang, ["Header name (X-API-Key)", "헤더 이름 (X-API-Key)", "ヘッダー名 (X-API-Key)", "标头名称 (X-API-Key)"]), auth.header.clone()),
+                ui::input("auth.token", t(self.lang, ["Value", "값", "値", "值"]), auth.token.clone()),
             ])),
             _ => {}
         }
-        children.push(ui::section("Authorization", auth_rows));
+        children.push(ui::section(t(self.lang, ["Authorization", "인증", "認証", "认证"]), auth_rows));
 
         if self.request.has_body() {
             let mut body = vec![
                 ui::textarea("body", "{\n  \"name\": \"value\"\n}", self.request.body.clone(), 10),
-                ui::row(vec![ui::button("body.format", "Format JSON"), ui::button("body.clear", "Clear")]),
+                ui::row(vec![ui::button("body.format", t(self.lang, ["Format JSON", "JSON 정리", "JSON を整形", "格式化 JSON"])), ui::button("body.clear", t(self.lang, ["Clear", "지우기", "クリア", "清空"]))]),
             ];
             if let Some(note) = body_note(&self.request.body) {
                 body.push(ui::styled_text(note, "muted"));
             }
-            children.push(ui::section("Body", body));
+            children.push(ui::section(t(self.lang, ["Body", "본문", "ボディ", "正文"]), body));
         }
 
         if self.pending.is_some() {
-            children.push(ui::spinner("Waiting for the server…"));
+            children.push(ui::spinner(t(self.lang, ["Waiting for the server…", "서버를 기다리는 중…", "サーバーを待っています…", "正在等待服务器…"])));
         }
         if let Some(outcome) = &self.outcome {
             children.push(ui::divider());
@@ -417,25 +435,25 @@ impl AgentRestClient {
                 ui::styled_text(format!("{} ms", outcome.duration_ms), "muted"),
                 ui::styled_text(format!("{} bytes", outcome.bytes), "muted"),
             ]));
-            let mut row = vec![ui::toggle("response.headers", "Response headers", self.show_response_headers)];
+            let mut row = vec![ui::toggle("response.headers", t(self.lang, ["Response headers", "응답 헤더", "レスポンスヘッダー", "响应标头"]), self.show_response_headers)];
             if outcome.pretty.is_some() {
-                row.push(ui::toggle("response.pretty", "Pretty", self.pretty));
+                row.push(ui::toggle("response.pretty", t(self.lang, ["Pretty", "보기 좋게", "整形", "美化"]), self.pretty));
             }
-            row.push(ui::button("response.copy", "Copy response"));
+            row.push(ui::button("response.copy", t(self.lang, ["Copy response", "응답 복사", "レスポンスをコピー", "复制响应"])));
             children.push(ui::row(row));
             if self.show_response_headers {
                 let items: Vec<Value> =
                     outcome.headers.iter().map(|(name, value)| ui::item(name.clone(), name.clone(), cut(value, 200))).collect();
-                children.push(ui::list("response.header.list", items, "None"));
+                children.push(ui::list("response.header.list", items, t(self.lang, ["None", "없음", "なし", "无"])));
             }
             if outcome.truncated {
-                children.push(ui::styled_text("The response was longer than 4 MB and is cut off.", "muted"));
+                children.push(ui::styled_text(t(self.lang, ["The response was longer than 4 MB and is cut off.", "응답이 4MB를 넘어 잘렸습니다.", "レスポンスが 4 MB を超えたため途中で切れています。", "响应超过 4 MB，已被截断。"]), "muted"));
             }
             let body = match (&outcome.pretty, self.pretty) {
                 (Some(pretty), true) => pretty.clone(),
                 _ => outcome.body.clone(),
             };
-            children.push(ui::styled_text(if body.is_empty() { "(empty body)".to_string() } else { body }, "code"));
+            children.push(ui::styled_text(if body.is_empty() { t(self.lang, ["(empty body)", "(본문 없음)", "（ボディなし）", "（无正文）"]).to_string() } else { body }, "code"));
         }
 
         if !self.history.is_empty() {
@@ -445,45 +463,54 @@ impl AgentRestClient {
                 .enumerate()
                 .map(|(index, request)| ui::item(index.to_string(), request.url.clone(), request.method()))
                 .collect();
-            children.push(ui::section("History", vec![ui::list("history", items, "Nothing yet")]));
+            children.push(ui::section(t(self.lang, ["History", "기록", "履歴", "历史"]), vec![ui::list("history", items, t(self.lang, ["Nothing yet", "아직 없음", "まだありません", "暂无"]))]));
         }
         children
     }
 
     fn environments_view(&self) -> Vec<Value> {
         let mut children = vec![ui::styled_text(
-            "Values here fill in {{name}} anywhere in a request: the URL, a header, the body, a token, even the proxy.",
+            t(self.lang, [
+                "Values here fill in {{name}} anywhere in a request: the URL, a header, the body, a token, even the proxy.",
+                "여기에 적은 값이 요청 어디에서나 {{name}} 자리에 들어갑니다. URL, 헤더, 본문, 토큰, 프록시까지.",
+                "ここの値はリクエストのどこでも {{name}} に入ります。URL、ヘッダー、ボディ、トークン、プロキシまで。",
+                "这里的值会填入请求中任何位置的 {{name}}：URL、标头、正文、令牌，以及代理。",
+            ]),
             "muted",
         )];
         children.push(ui::row(vec![
-            ui::input("name", "New environment name", self.name.clone()),
-            ui::button("env.new", "Add environment"),
+            ui::input("name", t(self.lang, ["New environment name", "새 환경 이름", "新しい環境の名前", "新环境名称"]), self.name.clone()),
+            ui::button("env.new", t(self.lang, ["Add environment", "환경 추가", "環境を追加", "添加环境"])),
         ]));
         let items: Vec<Value> = self
             .environments
             .iter()
             .map(|env| {
-                let mark = if env.name == self.active_env { " · in use" } else { "" };
-                ui::item(env.name.clone(), env.name.clone(), format!("{} values{mark}", env.values.len()))
+                let mark = if env.name == self.active_env { t(self.lang, [" · in use", " · 사용 중", " · 使用中", " · 使用中"]) } else { "" };
+                ui::item(env.name.clone(), env.name.clone(), format!("{} {}{mark}", env.values.len(), t(self.lang, ["values", "개 값", "個の値", "个值"])))
             })
             .collect();
-        children.push(ui::list("env.list", items, "No environments yet"));
+        children.push(ui::list("env.list", items, t(self.lang, ["No environments yet", "아직 환경이 없습니다", "まだ環境がありません", "还没有环境"])));
 
         if let Some(env) = self.environments.iter().find(|env| env.name == self.editing) {
             let mut rows = Vec::new();
             for (index, (key, value)) in env.values.iter().enumerate() {
                 rows.push(ui::row(vec![
-                    ui::input(format!("v.name.{index}"), "Name", key.clone()),
-                    ui::input(format!("v.value.{index}"), "Value", value.clone()),
-                    ui::styled_button(format!("v.del.{index}"), "Remove", "ghost"),
+                    ui::input(format!("v.name.{index}"), t(self.lang, ["Name", "이름", "名前", "名称"]), key.clone()),
+                    ui::input(format!("v.value.{index}"), t(self.lang, ["Value", "값", "値", "值"]), value.clone()),
+                    ui::styled_button(format!("v.del.{index}"), t(self.lang, ["Remove", "삭제", "削除", "移除"]), "ghost"),
                 ]));
             }
             rows.push(ui::row(vec![
-                ui::button("v.add", "Add value"),
-                ui::styled_button("env.use", if env.name == self.active_env { "In use" } else { "Use this one" }, "secondary"),
-                ui::styled_button("env.delete", "Delete environment", "danger"),
+                ui::button("v.add", t(self.lang, ["Add value", "값 추가", "値を追加", "添加值"])),
+                ui::styled_button(
+                    "env.use",
+                    if env.name == self.active_env { t(self.lang, ["In use", "사용 중", "使用中", "使用中"]) } else { t(self.lang, ["Use this one", "이것 사용", "これを使う", "使用这个"]) },
+                    "secondary",
+                ),
+                ui::styled_button("env.delete", t(self.lang, ["Delete environment", "환경 삭제", "環境を削除", "删除环境"]), "danger"),
             ]));
-            children.push(ui::section(format!("{} — values", env.name), rows));
+            children.push(ui::section(format!("{} — {}", env.name, t(self.lang, ["values", "값", "値", "值"])), rows));
         }
         children
     }
@@ -494,38 +521,72 @@ impl AgentRestClient {
             .iter()
             .map(|saved| {
                 let mut item = ui::item(saved.name.clone(), saved.name.clone(), format!("{} {}", saved.request.method(), saved.request.url));
-                item["actions"] = serde_json::json!([{ "id": "delete", "label": "Delete" }]);
+                item["actions"] = serde_json::json!([{ "id": "delete", "label": t(self.lang, ["Delete", "삭제", "削除", "删除"]) }]);
                 item
             })
             .collect();
         vec![
-            ui::styled_text("Saved requests. Pick one to load it back into the request view.", "muted"),
-            ui::list("collection.list", items, "Nothing saved yet — fill in a request, name it and press Save."),
+            ui::styled_text(
+                t(self.lang, [
+                    "Saved requests. Pick one to load it back into the request view.",
+                    "저장한 요청입니다. 하나를 고르면 요청 화면으로 불러옵니다.",
+                    "保存したリクエストです。選ぶとリクエスト画面に読み込みます。",
+                    "已保存的请求。选一个即可载回请求页。",
+                ]),
+                "muted",
+            ),
+            ui::list(
+                "collection.list",
+                items,
+                t(self.lang, [
+                    "Nothing saved yet — fill in a request, name it and press Save.",
+                    "아직 저장한 것이 없습니다 — 요청을 채우고 이름을 적은 뒤 저장을 누르세요.",
+                    "まだ保存がありません — リクエストを書き、名前を付けて保存を押してください。",
+                    "还没有保存 — 填好请求、取个名字，然后按保存。",
+                ]),
+            ),
         ]
     }
 
     fn settings_view(&self) -> Vec<Value> {
         vec![
             ui::section(
-                "Proxy",
+                t(self.lang, ["Proxy", "프록시", "プロキシ", "代理"]),
                 vec![
-                    ui::input("settings.proxy", "http://127.0.0.1:8888   (empty: none)", self.settings.proxy.clone()),
-                    ui::styled_text("HTTP and HTTPS proxies, with user:password@ if yours asks for it.", "muted"),
+                    ui::input(
+                        "settings.proxy",
+                        t(self.lang, [
+                            "http://127.0.0.1:8888   (empty: none)",
+                            "http://127.0.0.1:8888   (비우면 사용 안 함)",
+                            "http://127.0.0.1:8888   （空なら使わない）",
+                            "http://127.0.0.1:8888   （留空则不使用）",
+                        ]),
+                        self.settings.proxy.clone(),
+                    ),
+                    ui::styled_text(
+                        t(self.lang, [
+                            "HTTP and HTTPS proxies, with user:password@ if yours asks for it.",
+                            "HTTP·HTTPS 프록시를 쓸 수 있고, 인증이 필요하면 user:password@ 를 붙이세요.",
+                            "HTTP と HTTPS のプロキシが使えます。認証が要るなら user:password@ を付けてください。",
+                            "支持 HTTP 和 HTTPS 代理；若需认证，请加上 user:password@。",
+                        ]),
+                        "muted",
+                    ),
                 ],
             ),
             ui::section(
-                "Timeout",
+                t(self.lang, ["Timeout", "제한 시간", "タイムアウト", "超时"]),
                 vec![
                     ui::input(
                         "settings.timeout",
-                        "Seconds (empty: 15)",
+                        t(self.lang, ["Seconds (empty: 15)", "초 (비우면 15)", "秒（空なら 15）", "秒（留空为 15）"]),
                         if self.settings.timeout == 0 { String::new() } else { self.settings.timeout.to_string() },
                     ),
-                    ui::styled_text("Agentty allows 60 seconds at most.", "muted"),
+                    ui::styled_text(t(self.lang, ["Agentty allows 60 seconds at most.", "Agentty는 최대 60초까지 허용합니다.", "Agentty が許すのは最大 60 秒です。", "Agentty 最多允许 60 秒。"]), "muted"),
                 ],
             ),
             ui::section(
-                "What this plugin may do",
+                t(self.lang, ["What this plugin may do", "이 플러그인이 할 수 있는 일", "このプラグインにできること", "这个插件能做什么"]),
                 vec![ui::styled_text(
                     "It runs as WebAssembly inside Agentty: no files, no processes, no network of its own. Requests go out through \
                      Agentty with the net.request permission, and what you save here is kept in this plugin's own folder.",
@@ -563,7 +624,7 @@ impl AgentRestClient {
             ["save"] => {
                 let name = if self.name.trim().is_empty() { self.request.url.trim().to_string() } else { self.name.trim().to_string() };
                 if name.is_empty() {
-                    host.notify_user("warning", "Give it a name first");
+                    host.notify_user("warning", t(self.lang, ["Give it a name first", "먼저 이름을 적으세요", "先に名前を付けてください", "请先取个名字"]));
                     return true;
                 }
                 let saved = Saved { name: name.clone(), request: self.request.clone() };
@@ -571,7 +632,7 @@ impl AgentRestClient {
                 self.collection.insert(0, saved);
                 self.name.clear();
                 self.save(host, "collection");
-                host.notify_user("success", format!("Saved {name}"));
+                host.notify_user("success", format!("{} {name}", t(self.lang, ["Saved", "저장했습니다:", "保存しました:", "已保存："])));
             }
             ["h", "add"] => {
                 if self.request.headers.len() < MAX_ROWS {
@@ -600,7 +661,7 @@ impl AgentRestClient {
             ["body"] => self.request.body = value,
             ["body", "format"] => match pretty_json(&self.request.body) {
                 Some(pretty) => self.request.body = pretty,
-                None => host.notify_user("warning", "That body is not JSON"),
+                None => host.notify_user("warning", t(self.lang, ["That body is not JSON", "본문이 JSON이 아닙니다", "ボディが JSON ではありません", "正文不是 JSON"])),
             },
             ["body", "clear"] => self.request.body.clear(),
             ["curl"] => {
@@ -623,7 +684,7 @@ impl AgentRestClient {
                     &substitute(&self.settings.proxy, &values, &mut missing),
                 );
                 host.copy(command);
-                host.notify_user("success", "Copied the request as a cURL command");
+                host.notify_user("success", t(self.lang, ["Copied the request as a cURL command", "요청을 cURL 명령으로 복사했습니다", "リクエストを cURL コマンドとしてコピーしました", "已将请求复制为 cURL 命令"]));
                 return true;
             }
             ["response", "copy"] => {
@@ -633,7 +694,7 @@ impl AgentRestClient {
                     _ => outcome.body.clone(),
                 };
                 host.copy(body);
-                host.notify_user("success", "Copied the response body");
+                host.notify_user("success", t(self.lang, ["Copied the response body", "응답 본문을 복사했습니다", "レスポンスのボディをコピーしました", "已复制响应正文"]));
                 return true;
             }
             ["response", "pretty"] => self.pretty = event.is_on(),
@@ -660,7 +721,7 @@ impl AgentRestClient {
             ["env", "new"] => {
                 let name = self.name.trim().to_string();
                 if name.is_empty() {
-                    host.notify_user("warning", "Name it first");
+                    host.notify_user("warning", t(self.lang, ["Name it first", "먼저 이름을 적으세요", "先に名前を付けてください", "请先取个名字"]));
                     return true;
                 }
                 if !self.environments.iter().any(|env| env.name == name) {
@@ -743,8 +804,19 @@ impl AgentRestClient {
 
 impl Plugin for AgentRestClient {
     fn init(&mut self, host: &Host, _: &Value) {
+        self.lang = host.language();
         for key in KEYS {
             self.loading.push((host.storage_get(key), key.to_string()));
+        }
+    }
+
+    /// The user changed language, or moved to another workspace: either way this is where
+    /// Agentty says what they read now.
+    fn context(&mut self, host: &Host, _: &Value) {
+        let lang = host.language();
+        if lang != self.lang {
+            self.lang = lang;
+            self.draw(host);
         }
     }
 
@@ -831,6 +903,50 @@ export_plugin!(AgentRestClient);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every view, in every language: the panel draws, and what the user reads is theirs.
+    #[test]
+    fn the_panel_is_in_the_language_the_user_reads() {
+        let host = Host::new();
+        let _ = agentty_plugin::host_stubs::taken();
+        for lang in [Lang::En, Lang::Ko, Lang::Ja, Lang::Zh] {
+            for view in ["request", "environments", "collection", "settings"] {
+                let mut client = AgentRestClient { lang, view: view.to_string(), ..AgentRestClient::default() };
+                client.environments.push(Environment { name: "local".into(), values: vec![("baseUrl".into(), "x".into())] });
+                client.editing = "local".into();
+                client.request.headers.push(("A".into(), "b".into()));
+                client.request.auth.kind = "bearer".into();
+                client.request.method = "POST".into();
+                client.draw(&host);
+                let sent = agentty_plugin::host_stubs::taken();
+                let tree = sent.last().expect("a panel was drawn").clone();
+                assert_eq!(tree["method"], "ui/setPanel", "{lang:?}/{view}");
+                let drawn = tree.to_string();
+                assert!(drawn.len() > 200, "{lang:?}/{view} drew almost nothing");
+                if lang == Lang::Ko {
+                    // Something on the panel is Korean: the tabs alone are, in every view.
+                    let korean = drawn.chars().any(|c| ('\u{ac00}'..='\u{d7af}').contains(&c));
+                    assert!(korean, "{view} has nothing Korean on it");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn what_is_on_the_wire_is_not_translated() {
+        // The method and the tab are the plugin's own values, not what is shown: translating
+        // them would send a Korean word where a server expects a verb.
+        for lang in [Lang::En, Lang::Ko, Lang::Ja, Lang::Zh] {
+            for (value, _) in views(lang) {
+                assert!(value.is_ascii(), "{value} is not a value");
+            }
+            for (value, _) in auth_kinds(lang) {
+                assert!(value.is_ascii(), "{value} is not a value");
+            }
+        }
+        assert_eq!(views(Lang::Ko)[0].0, "request");
+        assert_eq!(auth_kinds(Lang::Ja)[1].0, "bearer");
+    }
 
     #[test]
     fn variables_are_filled_in_and_what_is_missing_is_named() {
