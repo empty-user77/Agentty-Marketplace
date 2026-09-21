@@ -77,7 +77,7 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 | `id` | 2–40 characters, `a-z 0-9 -`; the file is `plugins/<id>.json` |
 | `name`, `version`, `description` | shown in Agentty; `version` is `major.minor.patch`, the name is up to 60 characters and the description up to 300 |
 | `publisher`, `license` | who made it, and under what licence |
-| `source` | the public repository the module is built from — **required** |
+| `source` | the public repository the module is built from — **required**, on `github.com`, `gitlab.com`, `codeberg.org` or `git.sr.ht` |
 | `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set |
 | `apiVersion` | the plugin protocol the module is built against; leave it out for `1`. Agentty tells anyone running an older version that they need to update, instead of installing something it cannot run |
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
