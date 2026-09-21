@@ -29,7 +29,7 @@ API_VERSION = 1
 # The plugin protocol the current Agentty speaks. An entry built against a newer one would be shown
 # to everyone as "needs a newer Agentty" and installable by nobody, so it is refused until Agentty
 # ships that protocol and this number moves with it.
-PLUGIN_API_VERSION = 1
+PLUGIN_API_VERSION = 2
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
