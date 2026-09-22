@@ -16,6 +16,7 @@
     "source": { "type": "string", "format": "uri", "pattern": "^https://" },
     "homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
     "icon": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+    "logo": { "type": "string", "pattern": "^https://", "maxLength": 400 },
     "keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 30 } },
     "surface": { "enum": ["sidebar", "pane", "status"] },
     "mode": { "enum": ["push", "overlay", "window", "full"] },

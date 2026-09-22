@@ -213,6 +213,19 @@ def check(path: Path) -> dict:
     if icon and (not isinstance(icon, str) or not ICON.match(icon)):
         raise Problem("icon is a name from Agentty's icon set")
 
+    # A logo is drawn instead of the icon once Agentty has fetched it. Held to the same shape the
+    # app accepts (`parse_logo`): an https address with a plain host, so it can't carry a
+    # credential or point at a local name.
+    logo = entry.get("logo", "")
+    if logo:
+        if not isinstance(logo, str) or not logo.startswith("https://") or len(logo) > 400:
+            raise Problem("logo is an https:// URL of up to 400 characters")
+        if any(c.isspace() or ord(c) < 0x20 for c in logo):
+            raise Problem("logo is not a URL")
+        host = logo[len("https://"):].split("/")[0].split("?")[0].split("#")[0]
+        if "@" in host or "." not in host or not host:
+            raise Problem("logo's host is a plain name like example.com, with no credentials")
+
     api_version = entry.get("apiVersion", 1)
     if not isinstance(api_version, int) or isinstance(api_version, bool):
         raise Problem("apiVersion is a whole number")
