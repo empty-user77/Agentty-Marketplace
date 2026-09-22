@@ -97,7 +97,7 @@ did — see [Reproducible builds](#reproducible-builds).
 | `publisher`, `license` | who made it, and under what licence |
 | `source` | the public repository the module is built from — **required**, on `github.com`, `gitlab.com`, `codeberg.org` or `git.sr.ht`. It has to be the same repository as `build.repository`, so the code an entry links to is the code it ships |
 | `build` | **required** — how to build that module again. `repository` (the clone URL), `rev` (the full 40-character commit, not a tag or a branch, which can be moved afterwards), `path` (the plugin's directory in the repository, or `.`), `toolchain` (the Rust release the marketplace builds with) and `artifact` (the `.wasm` the build writes, relative to `path`). Nothing here is a command: what is run on it is fixed in `scripts/verify_build.py` |
-| `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set |
+| `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set. A plugin that wants its own artwork carries it in the module — see [Giving a plugin a logo](#giving-a-plugin-a-logo) — an entry has no `logo` field |
 | `apiVersion` | the plugin protocol the module is built against; leave it out for `1`. Agentty tells anyone running an older version that they need to update, instead of installing something it cannot run |
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
 | `mode` | how its panel opens: `push` (default), `overlay`, `window` or `full` |
@@ -105,6 +105,30 @@ did — see [Reproducible builds](#reproducible-builds).
 | `module.url` | `https://` on `github.com`, `raw.githubusercontent.com` or `objects.githubusercontent.com`. Put the version in the path so a release cannot be swapped underneath — that is a convention, not something CI checks |
 | `module.sha256` | the module's checksum. Agentty refuses a download that does not match, and refuses bytes that are not a WebAssembly module even when it does |
 | `module.size` | its exact length in bytes, up to 8 MB. Not a ceiling: a download of any other length is refused, so this changes with every build |
+
+## Giving a plugin a logo
+
+Agentty draws a plugin's own artwork instead of its `icon` name wherever the plugin appears. An
+entry does not carry one and Agentty never fetches one from an address: the picture travels inside
+the module, in a WebAssembly custom section called `agentty.logo`. The engine ignores that section,
+`module.sha256` already covers it, and CI builds it again from the source the entry names — so the
+picture that is drawn is the picture that was reviewed, and installing a plugin tells its author
+nothing.
+
+In Rust it is a static with two attributes. `#[used]` is not optional: without it a release build
+drops a static nothing refers to, and the section goes with it.
+
+```rust
+#[used]
+#[link_section = "agentty.logo"]
+static LOGO: [u8; 4096] = *include_bytes!("logo.png");
+```
+
+The length has to match the file. Agentty keeps the picture only when it is a **PNG, JPEG, GIF or
+WebP**, actually is one (the bytes are checked, not a name), and is **under 512 KB**; otherwise the
+plugin keeps its `icon`. **An SVG is never drawn.** An SVG is a document, not a picture: the
+renderer resolves the addresses inside it, and one of those could be a file on the machine of
+whoever installed the plugin. Export a raster image instead.
 
 ## Updating a plugin
 
