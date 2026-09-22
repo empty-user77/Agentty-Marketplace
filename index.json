@@ -1,6 +1,6 @@
 {
   "apiVersion": 1,
-  "updated": "2026-09-21T18:55:41Z",
+  "updated": "2026-09-22T01:01:56Z",
   "plugins": [
     {
       "id": "agent-rest-client",
@@ -11,6 +11,13 @@
       "icon": "globe",
       "license": "GPL-3.0-or-later",
       "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/agent-rest-client",
+      "build": {
+        "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+        "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+        "path": "src/agent-rest-client",
+        "toolchain": "1.98.1",
+        "artifact": "target/wasm32-unknown-unknown/release/agent_rest_client.wasm"
+      },
       "homepage": "https://agentty.run",
       "keywords": [
         "http",
@@ -27,8 +34,8 @@
       ],
       "module": {
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-0.3.0.wasm",
-        "sha256": "7c410f00446051969618a481e226c8dc3126f942be297f148b632939515b298a",
-        "size": 187565
+        "sha256": "6ab26327d2e11bf700810d21f89a7dcda3a570cde9e7ff1384ecc35e2214e5e9",
+        "size": 187334
       }
     },
     {
@@ -40,6 +47,13 @@
       "icon": "pencil",
       "license": "GPL-3.0-or-later",
       "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/blogger-agentos",
+      "build": {
+        "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+        "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+        "path": "src/blogger-agentos",
+        "toolchain": "1.98.1",
+        "artifact": "target/wasm32-unknown-unknown/release/blogger_agentos.wasm"
+      },
       "homepage": "https://agentty.run",
       "keywords": [
         "agentos",
@@ -57,8 +71,8 @@
       ],
       "module": {
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/blogger-agentos-0.2.0.wasm",
-        "sha256": "04582279a999be0dd848387d8e60682f0f79c5254f53f6d6fb9db1f1ba21cab9",
-        "size": 145444
+        "sha256": "9c520162e451cdef9c8d90add96795affe3a7d5fba8b9188907d53553212ecbe",
+        "size": 145116
       }
     },
     {
@@ -70,6 +84,13 @@
       "icon": "sparkles",
       "license": "GPL-3.0-or-later",
       "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/hello-rust",
+      "build": {
+        "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+        "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+        "path": "src/hello-rust",
+        "toolchain": "1.98.1",
+        "artifact": "target/wasm32-unknown-unknown/release/hello_rust.wasm"
+      },
       "homepage": "https://agentty.run",
       "keywords": [
         "example",
@@ -81,8 +102,8 @@
       "permissions": [],
       "module": {
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/hello-rust-0.1.0.wasm",
-        "sha256": "768ac7e0207a0d014ea5584993c177bb81616dc487c955a6b463187092d5c6ea",
-        "size": 93439
+        "sha256": "0971ff59c2d75fb4b59cfbd80c3aa8fe31d0a99db81357feceba3511a9b0789f",
+        "size": 97392
       }
     },
     {
@@ -94,6 +115,13 @@
       "icon": "sparkles",
       "license": "GPL-3.0-or-later",
       "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/social-agentos",
+      "build": {
+        "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+        "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+        "path": "src/social-agentos",
+        "toolchain": "1.98.1",
+        "artifact": "target/wasm32-unknown-unknown/release/social_agentos.wasm"
+      },
       "homepage": "https://agentty.run",
       "keywords": [
         "agentos",
@@ -113,8 +141,8 @@
       ],
       "module": {
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/social-agentos-0.1.0.wasm",
-        "sha256": "00f74417a60195aefea0e9f9e01bd6955dbafc5be25e7d0fa98a83e47df97638",
-        "size": 209884
+        "sha256": "7fbdb970d159b0e110700fe8f60cf7fdfc70e40674fb464d9d694af1d0594f70",
+        "size": 210411
       }
     }
   ]

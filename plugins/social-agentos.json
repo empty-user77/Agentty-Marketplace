@@ -7,6 +7,13 @@
   "icon": "sparkles",
   "license": "GPL-3.0-or-later",
   "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/social-agentos",
+  "build": {
+    "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+    "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+    "path": "src/social-agentos",
+    "toolchain": "1.98.1",
+    "artifact": "target/wasm32-unknown-unknown/release/social_agentos.wasm"
+  },
   "homepage": "https://agentty.run",
   "keywords": [
     "agentos",
@@ -26,7 +33,7 @@
   ],
   "module": {
     "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/social-agentos-0.1.0.wasm",
-    "sha256": "00f74417a60195aefea0e9f9e01bd6955dbafc5be25e7d0fa98a83e47df97638",
-    "size": 209884
+    "sha256": "7fbdb970d159b0e110700fe8f60cf7fdfc70e40674fb464d9d694af1d0594f70",
+    "size": 210411
   }
 }

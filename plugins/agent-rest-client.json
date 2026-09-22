@@ -7,6 +7,13 @@
   "icon": "globe",
   "license": "GPL-3.0-or-later",
   "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/agent-rest-client",
+  "build": {
+    "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+    "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+    "path": "src/agent-rest-client",
+    "toolchain": "1.98.1",
+    "artifact": "target/wasm32-unknown-unknown/release/agent_rest_client.wasm"
+  },
   "homepage": "https://agentty.run",
   "keywords": [
     "http",
@@ -23,7 +30,7 @@
   ],
   "module": {
     "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-0.3.0.wasm",
-    "sha256": "7c410f00446051969618a481e226c8dc3126f942be297f148b632939515b298a",
-    "size": 187565
+    "sha256": "6ab26327d2e11bf700810d21f89a7dcda3a570cde9e7ff1384ecc35e2214e5e9",
+    "size": 187334
   }
 }

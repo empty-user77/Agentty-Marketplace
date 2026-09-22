@@ -5,8 +5,9 @@ Every entry is a plugin someone submitted: treat it as text from a stranger. Not
 module or trusts a URL to be what it says — the checksum is what decides, and the checks below are
 what a reviewer would otherwise have to remember.
 
-    python3 scripts/validate.py              # shape, ids, URLs, permissions
+    python3 scripts/validate.py              # shape, ids, URLs, permissions, the build block
     python3 scripts/validate.py --download   # also fetch each module and check its checksum
+    python3 scripts/validate.py --source     # also check the source is public and the commit is there
     python3 scripts/validate.py --index      # rewrite index.json from plugins/*.json
 """
 
@@ -15,8 +16,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +38,13 @@ ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 ICON = re.compile(r"^[a-z0-9-]{1,40}$")
+# A commit, not a tag or a branch: a tag can be moved to other code after the review.
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+# The Rust release the module is built with. Pinned, because a wasm build only reproduces when the
+# compiler does: two rustc versions on the same source give two different modules.
+TOOLCHAIN = re.compile(r"^\d+\.\d+\.\d+$")
+# Inside the repository, so it cannot climb out of the checkout when CI builds it.
+REPO_PATH = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]{1,200}$")
 
 # What Agentty knows how to ask the user about. A plugin naming anything else would be installed
 # with a permission nobody can explain.
@@ -46,12 +57,20 @@ MODES = {"push", "overlay", "window", "full"}
 MODULE_HOSTS = {"github.com", "raw.githubusercontent.com", "objects.githubusercontent.com"}
 SOURCE_HOSTS = {"github.com", "gitlab.com", "codeberg.org", "git.sr.ht"}
 
+# The Rust the marketplace builds every submission with. Raising it re-checksums every module, so
+# it moves deliberately: bump it, rebuild with scripts/build-plugins.sh, and update the entries.
+BUILD_TOOLCHAIN = "1.98.1"
+# The one command CI runs. A submission says where its source is, never what to run on it.
+BUILD_COMMAND = ["cargo", "build", "--release", "--locked", "--offline", "--target", "wasm32-unknown-unknown"]
+
+AGENT = "agentty-marketplace-validate"
+
 MAX_MODULE_BYTES = 8 * 1024 * 1024
 MAX_DESCRIPTION = 300
 MAX_NAME = 60
 MAX_KEYWORDS = 10
 
-REQUIRED = ["id", "name", "version", "description", "publisher", "license", "source", "module"]
+REQUIRED = ["id", "name", "version", "description", "publisher", "license", "source", "module", "build"]
 
 
 class Problem(Exception):
@@ -81,6 +100,80 @@ def text(entry: dict, field: str, limit: int, required: bool = True) -> str:
     if any(ord(c) < 0x20 for c in value):
         raise Problem(f"{field} contains control characters")
     return value
+
+
+def repo_url(url: str, field: str) -> tuple[str, str]:
+    """The host and owner/name a code URL points at. Raises Problem if it is not one."""
+    host = url_host(url, field)
+    if host not in SOURCE_HOSTS:
+        raise Problem(f"{field} is on {host}; source is public on {', '.join(sorted(SOURCE_HOSTS))}")
+    parts = [p for p in url[len("https://"):].split("/")[1:] if p]
+    if len(parts) < 2:
+        raise Problem(f"{field} must name a repository, as https://{host}/owner/name")
+    owner, name = parts[0], parts[1]
+    if name.endswith(".git"):
+        name = name[: -len(".git")]
+    return host, f"{owner}/{name}".lower()
+
+
+def check_build(entry: dict) -> dict:
+    """Where the module is built from. Everything CI needs to build it again and compare."""
+    build = entry["build"]
+    if not isinstance(build, dict):
+        raise Problem("build is an object with repository, rev, path, toolchain and artifact")
+
+    for field in ("repository", "rev", "path", "toolchain", "artifact"):
+        if field not in build:
+            raise Problem(f"build.{field} is required: CI builds the module again and compares it")
+
+    build_host, build_repo = repo_url(build["repository"], "build.repository")
+
+    # The entry's own source link has to lead to the code that was built, not to some other
+    # repository of the same publisher. This is the half of "the source is public" that a checksum
+    # cannot tell you.
+    source_host, source_repo = repo_url(entry["source"], "source")
+    if (source_host, source_repo) != (build_host, build_repo):
+        raise Problem(f"source points at {source_host}/{source_repo}, build.repository at {build_host}/{build_repo}: they must be the same repository")
+
+    if not isinstance(build["rev"], str) or not COMMIT.match(build["rev"]):
+        raise Problem("build.rev is the full 40-character commit the module is built from, not a tag or a branch")
+
+    for field in ("path", "artifact"):
+        value = build[field]
+        if not isinstance(value, str) or not REPO_PATH.match(value):
+            raise Problem(f"build.{field} is a path inside the repository, without '..'")
+    if not build["artifact"].endswith(".wasm"):
+        raise Problem("build.artifact is the .wasm the build writes, relative to build.path")
+
+    toolchain = build["toolchain"]
+    if not isinstance(toolchain, str) or not TOOLCHAIN.match(toolchain):
+        raise Problem("build.toolchain is a Rust release, as 1.98.1")
+    if toolchain != BUILD_TOOLCHAIN:
+        raise Problem(f"build.toolchain is {toolchain}; the marketplace builds every module with {BUILD_TOOLCHAIN}")
+
+    return build
+
+
+def source_is_public(entry: dict) -> None:
+    """Fetches the source, anonymously, the way anyone reading the entry would. Never clones."""
+    for field, url in (("source", entry["source"]), ("build.repository", entry["build"]["repository"])):
+        request = urllib.request.Request(url, headers={"User-Agent": AGENT}, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                response.read(1)
+        except urllib.error.HTTPError as err:
+            raise Problem(f"{field} is not public: {url} answers {err.code}") from err
+
+    rev, repository = entry["build"]["rev"], entry["build"]["repository"]
+    found = subprocess.run(
+        ["git", "ls-remote", "--exit-code", repository, rev],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "true", "GCM_INTERACTIVE": "never"},
+    )
+    # A commit that is not a ref still has to be reachable; ls-remote only lists refs, so a miss
+    # here is not a failure on its own. An unreadable repository is.
+    if found.returncode not in (0, 2):
+        raise Problem(f"build.repository cannot be read without credentials: {found.stderr.strip().splitlines()[-1] if found.stderr.strip() else 'git ls-remote failed'}")
 
 
 def check(path: Path) -> dict:
@@ -164,6 +257,8 @@ def check(path: Path) -> dict:
     if not isinstance(size, int) or not 0 < size <= MAX_MODULE_BYTES:
         raise Problem(f"module.size is the size in bytes, up to {MAX_MODULE_BYTES // 1024 // 1024} MB")
 
+    check_build(entry)
+
     # A plugin that both reads the user's work and sends requests out can carry it away. It is
     # allowed, and it is said out loud.
     if "net.request" in permissions and {"session.read", "workspace.read"} & set(permissions):
@@ -172,21 +267,85 @@ def check(path: Path) -> dict:
     return entry
 
 
+def this_repository() -> str:
+    """owner/name of the repository this checkout is, lowercased, or "" if it cannot be told."""
+    try:
+        remote = subprocess.run(
+            ["git", "-C", str(ROOT), "config", "--get", "remote.origin.url"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    url = remote.stdout.strip()
+    if not url:
+        return ""
+    url = url.removesuffix(".git").replace(":", "/")
+    parts = [part for part in url.split("/") if part]
+    return "/".join(parts[-2:]).lower() if len(parts) >= 2 else ""
+
+
+def served_here(entry: dict) -> Path | None:
+    """The file in this checkout that a module URL points at, when it points back at this repo.
+
+    The plugins published from here are served out of main, so on a pull request the URL still
+    serves the old module: the new one is the file in the branch. Checking the URL would mean an
+    entry could never change its module and go green in the same pull request. The file about to be
+    merged is the honest thing to weigh.
+    """
+    repository = this_repository()
+    if not repository:
+        return None
+    url = entry["module"]["url"]
+    if url_host(url, "module.url") != "raw.githubusercontent.com":
+        return None
+    parts = url[len("https://raw.githubusercontent.com/"):].split("/")
+    # <owner>/<name>/<ref>/modules/<file>
+    if len(parts) != 5 or "/".join(parts[:2]).lower() != repository or parts[3] != "modules":
+        return None
+    here = ROOT / "modules" / parts[4]
+    return here if here.is_file() else None
+
+
 def download(entry: dict) -> None:
-    """Fetches the module and checks it against the entry. Never runs it."""
+    """Weighs the module against the entry. Never runs it."""
     module = entry["module"]
-    request = urllib.request.Request(module["url"], headers={"User-Agent": "agentty-marketplace-validate"})
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - https is checked above
-        data = response.read(MAX_MODULE_BYTES + 1)
+    here = served_here(entry)
+    if here is not None:
+        data = here.read_bytes()[: MAX_MODULE_BYTES + 1]
+    else:
+        request = urllib.request.Request(module["url"], headers={"User-Agent": AGENT})
+        with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - https is checked above
+            data = response.read(MAX_MODULE_BYTES + 1)
     if len(data) > MAX_MODULE_BYTES:
         raise Problem("the module is larger than the limit")
+    called = "the file in modules/" if here is not None else "the download"
     if len(data) != module["size"]:
-        raise Problem(f"module.size says {module['size']}, the download is {len(data)} bytes")
+        raise Problem(f"module.size says {module['size']}, {called} is {len(data)} bytes")
     digest = hashlib.sha256(data).hexdigest()
     if digest != module["sha256"]:
-        raise Problem(f"module.sha256 says {module['sha256']}, the download is {digest}")
+        raise Problem(f"module.sha256 says {module['sha256']}, {called} is {digest}")
     if not data.startswith(b"\x00asm"):
         raise Problem("that file is not a WebAssembly module")
+
+
+def write_index(checked: list[dict]) -> bool:
+    """Rewrites index.json from the entries. Returns whether anything changed.
+
+    `updated` is the day the list changed, not the minute this ran: a timestamp that moved on every
+    run would make "index.json matches the entries" fail on a pull request that never touched it.
+    """
+    index = {"apiVersion": API_VERSION, "updated": "", "plugins": checked}
+    try:
+        before = json.loads(INDEX.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        before = {}
+    unchanged = before.get("apiVersion") == API_VERSION and before.get("plugins") == checked
+    index["updated"] = (
+        before["updated"] if unchanged and isinstance(before.get("updated"), str)
+        else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    INDEX.write_text(json.dumps(index, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return not unchanged
 
 
 def entries() -> list[Path]:
@@ -196,6 +355,7 @@ def entries() -> list[Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--download", action="store_true", help="fetch each module and check its checksum")
+    parser.add_argument("--source", action="store_true", help="check the source is readable by anyone")
     parser.add_argument("--index", action="store_true", help="rewrite index.json from the entries")
     args = parser.parse_args()
 
@@ -203,6 +363,8 @@ def main() -> int:
     for path in entries():
         try:
             entry = check(path)
+            if args.source:
+                source_is_public(entry)
             if args.download:
                 download(entry)
             checked.append(entry)
@@ -210,21 +372,19 @@ def main() -> int:
         except Problem as problem:
             failed += 1
             print(f"FAIL  {path.name}: {problem}")
+        except subprocess.TimeoutExpired:
+            failed += 1
+            print(f"FAIL  {path.name}: the source host did not answer in time")
         except OSError as err:
             failed += 1
-            print(f"FAIL  {path.name}: could not fetch the module: {err}")
+            print(f"FAIL  {path.name}: could not reach it: {err}")
 
     if failed:
         print(f"\n{failed} entr{'y' if failed == 1 else 'ies'} need work.")
         return 1
 
     if args.index:
-        index = {
-            "apiVersion": API_VERSION,
-            "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "plugins": checked,
-        }
-        INDEX.write_text(json.dumps(index, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        write_index(checked)
         print(f"\nindex.json: {len(checked)} plugin(s)")
     else:
         print(f"\n{len(checked)} entr{'y' if len(checked) == 1 else 'ies'} checked.")
