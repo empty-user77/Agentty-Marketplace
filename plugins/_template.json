@@ -7,6 +7,13 @@
   "icon": "sparkles",
   "license": "MIT",
   "source": "https://github.com/you/your-plugin",
+  "build": {
+    "repository": "https://github.com/you/your-plugin",
+    "rev": "0000000000000000000000000000000000000000",
+    "path": ".",
+    "toolchain": "1.98.1",
+    "artifact": "target/wasm32-unknown-unknown/release/your_plugin.wasm"
+  },
   "homepage": "https://github.com/you/your-plugin",
   "keywords": ["example"],
   "apiVersion": 1,

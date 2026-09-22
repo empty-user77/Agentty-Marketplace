@@ -16,7 +16,10 @@ both halves matter:
   internet. Distribute those yourself; people install them from a folder or a Git repository and
   decide for themselves.
 - **Source in the open**, because the module here is a binary. Anyone can read what it is built
-  from, and build it again.
+  from, and build it again — and CI does exactly that before the plugin is accepted. Every entry
+  names the commit its module is built from; CI clones it, builds it in a pinned container, and
+  refuses the entry unless the bytes that come out hash to the checksum the entry claims. A module
+  that cannot be reproduced from its own source is not offered here, whatever else it says.
 
 ## What is where
 
@@ -27,7 +30,9 @@ both halves matter:
 | `sdk/rust/` | the Rust SDK a plugin is written against |
 | `src/<id>/` | the plugins published from this repository |
 | `modules/<id>-<version>.wasm` | their built modules, which their entries point at |
-| `scripts/validate.py` | the checks; `scripts/build-plugins.sh` builds everything in `src/` |
+| `scripts/validate.py` | the checks on an entry: shape, hosts, permissions, the build block |
+| `scripts/verify_build.py` | builds each entry's source again and compares it to `module.sha256` |
+| `scripts/build-plugins.sh` | builds everything in `src/`, in the same pinned container |
 
 A plugin of your own does not go in `src/`: it lives in your repository, and only its entry comes
 here.
@@ -38,14 +43,20 @@ here.
    place.
 2. Copy `plugins/_template.json` to `plugins/<your-plugin-id>.json` and fill it in. The id matches
    the file name and the `id` in your `agentty-plugin.json`.
-3. Open a pull request. CI checks the entry, downloads the module, and refuses it unless the
-   checksum matches.
+3. Open a pull request. CI checks the entry, downloads the module, **builds your source again from
+   the commit you named**, and refuses it unless all three agree.
 
 ```sh
 python3 scripts/validate.py                 # every entry
 python3 scripts/validate.py --download      # also fetch each module and check its checksum
+python3 scripts/validate.py --source        # also check the source is readable by anyone
+python3 scripts/verify_build.py             # build each source again; compare it to the checksum
 python3 scripts/validate.py --index         # rebuild index.json (CI does this on main)
 ```
+
+`verify_build.py` needs Docker: the module is built in a digest-pinned `rust` image so the bytes do
+not depend on the machine doing the building. That is what lets CI arrive at the same checksum you
+did — see [Reproducible builds](#reproducible-builds).
 
 ## What an entry looks like
 
@@ -59,6 +70,13 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
   "icon": "sparkles",
   "license": "MIT",
   "source": "https://github.com/you/agentty-hello-world",
+  "build": {
+    "repository": "https://github.com/you/agentty-hello-world",
+    "rev": "3f2b1c9e4a7d05b8c6e1f0a2d4b83c7e9015d6af",
+    "path": ".",
+    "toolchain": "1.98.1",
+    "artifact": "target/wasm32-unknown-unknown/release/hello_world.wasm"
+  },
   "keywords": ["example"],
   "apiVersion": 1,
   "surface": "sidebar",
@@ -77,7 +95,8 @@ python3 scripts/validate.py --index         # rebuild index.json (CI does this o
 | `id` | 2–40 characters, `a-z 0-9 -`; the file is `plugins/<id>.json` |
 | `name`, `version`, `description` | shown in Agentty; `version` is `major.minor.patch`, the name is up to 60 characters and the description up to 300 |
 | `publisher`, `license` | who made it, and under what licence |
-| `source` | the public repository the module is built from — **required**, on `github.com`, `gitlab.com`, `codeberg.org` or `git.sr.ht` |
+| `source` | the public repository the module is built from — **required**, on `github.com`, `gitlab.com`, `codeberg.org` or `git.sr.ht`. It has to be the same repository as `build.repository`, so the code an entry links to is the code it ships |
+| `build` | **required** — how to build that module again. `repository` (the clone URL), `rev` (the full 40-character commit, not a tag or a branch, which can be moved afterwards), `path` (the plugin's directory in the repository, or `.`), `toolchain` (the Rust release the marketplace builds with) and `artifact` (the `.wasm` the build writes, relative to `path`). Nothing here is a command: what is run on it is fixed in `scripts/verify_build.py` |
 | `homepage`, `keywords`, `icon` | optional; the icon is a name from Agentty's set |
 | `apiVersion` | the plugin protocol the module is built against; leave it out for `1`. Agentty tells anyone running an older version that they need to update, instead of installing something it cannot run |
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
@@ -97,8 +116,46 @@ If the new version uses something only a newer Agentty has, raise `apiVersion` w
 older Agentty then keep the version they have and are told to update, instead of being handed a
 module their app cannot run.
 
+## Reproducible builds
+
+An entry is a link to a binary. Reading the source beside it tells you nothing about that binary —
+the two are only connected by whoever uploaded them. So CI connects them itself:
+
+1. It clones `build.repository` at `build.rev`. A commit, not a tag: a tag can be pointed at other
+   code the day after the review, and a branch moves on its own.
+2. It reads `agentty-plugin.json` at `build.path` and checks it agrees with the entry — same id,
+   same version, same `apiVersion`, the same permissions. The entry is what Agentty shows people;
+   the manifest is what the plugin actually is, and they are not allowed to disagree.
+3. It builds it with `cargo build --release --locked --offline --target wasm32-unknown-unknown`,
+   inside a `rust` image pinned by digest, with `RUSTUP_TOOLCHAIN` forced to the marketplace's Rust
+   release — so a `rust-toolchain.toml` in the submission cannot choose its own compiler, and with
+   it its own bytes. Dependencies are fetched first, under `Cargo.lock`; the build itself then runs
+   with **no network at all**, because a build script is code and has no business reaching out.
+4. It hashes the `.wasm` the build wrote. If that is not `module.sha256`, the entry is refused.
+
+Two consequences worth knowing before you submit:
+
+- **`Cargo.lock` has to be committed.** Without it the dependencies, and so the module, can change
+  under an entry that was already reviewed.
+- **The toolchain is the marketplace's, not yours.** `build.toolchain` must be the Rust release in
+  `BUILD_TOOLCHAIN` (`scripts/validate.py`). Build with the same one — `scripts/build-plugins.sh`
+  does it for you — or your checksum will not be the one CI arrives at. When the marketplace raises
+  that release, every module is rebuilt and re-checksummed at once.
+
+This runs once, at the pull request that registers or updates an entry — a pull request rebuilds
+only the entries it touches, never the whole list on a schedule, so the cost of checking a plugin
+stays the same no matter how many others are already in the marketplace. It is not repeated for an
+entry that already merged: a source that is deleted, rewritten or made private afterwards is not
+caught by this list on its own.
+
 ## What gets a plugin refused
 
+- A module that does not come out of its own source: CI builds `build.rev` and gets other bytes.
+- A `build.rev` that is not in the repository, a tag or branch where a commit belongs, or a
+  repository that cannot be cloned without credentials.
+- An `agentty-plugin.json` that disagrees with the entry about the version, the protocol or the
+  permissions.
+- A missing `Cargo.lock`, or a build that does not complete with the marketplace's Rust release.
 - A module that is not built from the repository in `source`, or a repository nobody can read.
 - A checksum that does not match what the URL serves.
 - Permissions the plugin does not use, or a description that does not say what it does with them.

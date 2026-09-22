@@ -7,6 +7,13 @@
   "icon": "sparkles",
   "license": "GPL-3.0-or-later",
   "source": "https://github.com/empty-user77/Agentty-Marketplace/tree/main/src/hello-rust",
+  "build": {
+    "repository": "https://github.com/empty-user77/Agentty-Marketplace",
+    "rev": "9cd04de89f0f62a9dbd69084fc6c0527602af899",
+    "path": "src/hello-rust",
+    "toolchain": "1.98.1",
+    "artifact": "target/wasm32-unknown-unknown/release/hello_rust.wasm"
+  },
   "homepage": "https://agentty.run",
   "keywords": [
     "example",
@@ -18,7 +25,7 @@
   "permissions": [],
   "module": {
     "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/hello-rust-0.1.0.wasm",
-    "sha256": "768ac7e0207a0d014ea5584993c177bb81616dc487c955a6b463187092d5c6ea",
-    "size": 93439
+    "sha256": "0971ff59c2d75fb4b59cfbd80c3aa8fe31d0a99db81357feceba3511a9b0789f",
+    "size": 97392
   }
 }

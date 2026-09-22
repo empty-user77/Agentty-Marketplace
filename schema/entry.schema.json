@@ -5,7 +5,7 @@
   "description": "One plugin offered in Agentty's Plugins page. scripts/validate.py checks more than this schema can say.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "name", "version", "description", "publisher", "license", "source", "module"],
+  "required": ["id", "name", "version", "description", "publisher", "license", "source", "build", "module"],
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" },
     "name": { "type": "string", "minLength": 1, "maxLength": 60 },
@@ -23,6 +23,19 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "enum": ["net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read"] }
+    },
+    "build": {
+      "description": "Where the module is built from. CI clones this commit, builds it with the pinned Rust, and refuses the entry unless the bytes hash to module.sha256.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "rev", "path", "toolchain", "artifact"],
+      "properties": {
+        "repository": { "type": "string", "pattern": "^https://" },
+        "rev": { "description": "the full commit, not a tag or a branch", "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "path": { "description": "the plugin's directory in that repository", "type": "string", "pattern": "^(?!/)[A-Za-z0-9._/-]{1,200}$" },
+        "toolchain": { "description": "the Rust release the marketplace builds with", "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "artifact": { "description": "the .wasm the build writes, relative to path", "type": "string", "pattern": "^(?!/)[A-Za-z0-9._/-]{1,200}\\.wasm$" }
+      }
     },
     "module": {
       "type": "object",
