@@ -1,2 +1,5 @@
 target/
 .DS_Store
+# What `src/*/build.sh` leaves beside a plugin's manifest. The module that is published lives in
+# modules/, named with its version, and is what index.json holds the checksum of.
+src/*/*.wasm

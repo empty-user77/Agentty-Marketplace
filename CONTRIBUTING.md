@@ -2,10 +2,13 @@
 
 ## What is offered here
 
-A plugin in this list is a **WebAssembly module** whose **source is public**. Agentty runs the
+A plugin in this list is a **WebAssembly module** whose **source is public** — on `github.com`,
+`gitlab.com`, `codeberg.org` or `git.sr.ht`; it does not have to be GitHub. Agentty runs the
 module itself, so it reaches only what the plugin protocol gives it — no files, no processes, no
 network of its own — and everything it does ask for is a permission the user sees before
-installing. That is what makes it safe to install a binary from a list.
+installing. On installing, the download has to be exactly the length the entry claims, hash to the
+checksum it claims, and begin like a WebAssembly module. That is what makes it safe to install a
+binary from a list.
 
 Plugins that run as a program (`node`, `python`, an executable) have everything you have. Agentty
 installs those from a folder or a Git repository, where the person doing it chose the source

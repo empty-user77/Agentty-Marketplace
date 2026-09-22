@@ -37,6 +37,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::cell::RefCell;
 
+pub mod agentos;
+pub mod text;
 pub mod ui;
 
 pub use serde_json;
@@ -51,17 +53,82 @@ extern "C" {
     fn now_ms() -> i64;
 }
 
-// Building for the host (tests, `cargo check`) instead of wasm: the imports do nothing.
+// Building for the host (tests, `cargo check`) instead of wasm. A pointer is 32 bits wide on
+// wasm and 64 here, so the imports cannot be called the same way; these keep what they were given
+// instead, and a plugin — an AgentOS above all — can be run and its messages read in an ordinary
+// `cargo test`, without a wasm runtime and without Agentty.
 #[cfg(not(target_arch = "wasm32"))]
-mod host_stubs {
-    pub unsafe fn send(_ptr: i32, _len: i32) {}
-    pub unsafe fn log(_ptr: i32, _len: i32) {}
-    pub unsafe fn now_ms() -> i64 {
-        0
+pub mod host_stubs {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static SENT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        static LOGGED: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+        static CLOCK: RefCell<i64> = const { RefCell::new(0) };
+    }
+
+    pub(crate) fn send(text: &str) {
+        SENT.with(|sent| sent.borrow_mut().push(text.to_string()));
+    }
+
+    pub(crate) fn log(line: &str) {
+        LOGGED.with(|logged| logged.borrow_mut().push(line.to_string()));
+    }
+
+    pub(crate) fn now_ms() -> i64 {
+        CLOCK.with(|clock| *clock.borrow())
+    }
+
+    /// Everything the plugin has sent Agentty since this was last called, as JSON.
+    pub fn taken() -> Vec<serde_json::Value> {
+        SENT.with(|sent| std::mem::take(&mut *sent.borrow_mut()))
+            .iter()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect()
+    }
+
+    /// Everything the plugin has written to its log since this was last called.
+    pub fn logged() -> Vec<String> {
+        LOGGED.with(|logged| std::mem::take(&mut *logged.borrow_mut()))
+    }
+
+    /// What [`crate::Host::now_ms`] answers in a test.
+    pub fn set_clock(ms: i64) {
+        CLOCK.with(|clock| *clock.borrow_mut() = ms);
     }
 }
-#[cfg(not(target_arch = "wasm32"))]
-use host_stubs::{log, now_ms, send};
+
+/// One line to the plugin's log, whichever side of the wasm boundary this was built for.
+fn log_line(line: &str) {
+    #[cfg(target_arch = "wasm32")]
+    // SAFETY: the pointer and length describe `line`, which outlives the call.
+    unsafe {
+        log(line.as_ptr() as i32, line.len() as i32)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    host_stubs::log(line);
+}
+
+/// One message to Agentty.
+fn send_text(text: &str) {
+    #[cfg(target_arch = "wasm32")]
+    // SAFETY: the pointer and length describe `text`, which outlives the call.
+    unsafe {
+        send(text.as_ptr() as i32, text.len() as i32)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    host_stubs::send(text);
+}
+
+fn clock_ms() -> i64 {
+    #[cfg(target_arch = "wasm32")]
+    // SAFETY: an import Agentty defines; it takes and returns plain numbers.
+    unsafe {
+        now_ms()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    host_stubs::now_ms()
+}
 
 /// What a plugin answers. Every method has a default, so a plugin implements only what it uses.
 pub trait Plugin: 'static {
@@ -94,6 +161,11 @@ pub trait Plugin: 'static {
     fn answer(&mut self, host: &Host, id: u64, result: Result<Value, String>) {
         let _ = (host, id, result);
     }
+    /// A pane this plugin started changed what it is doing: `working`, `idle`, `finished`,
+    /// `permission`, `question`, `interrupted`, `exited` or `closed`. Needs `workspace.read`.
+    fn pane_status(&mut self, host: &Host, status: PaneStatus) {
+        let _ = (host, status);
+    }
     /// Where the user is now (focused pane, its folder and status), as far as the plugin's
     /// permissions allow.
     fn context(&mut self, host: &Host, context: &Value) {
@@ -106,32 +178,38 @@ pub trait Plugin: 'static {
 }
 
 /// Agentty, as the plugin can ask things of it.
+#[derive(Default)]
 pub struct Host {
     next_id: RefCell<u64>,
     context: RefCell<Value>,
 }
 
 impl Host {
-    fn new() -> Self {
+    /// A host of this plugin's own, for a test: what it sends can be read back with
+    /// `host_stubs::taken()` when this is not built for wasm.
+    pub fn new() -> Self {
         Self { next_id: RefCell::new(1), context: RefCell::new(Value::Null) }
     }
 
     /// Milliseconds since the Unix epoch.
     pub fn now_ms(&self) -> i64 {
-        // SAFETY: an import Agentty defines; it takes and returns plain numbers.
-        unsafe { now_ms() }
+        clock_ms()
     }
 
     /// A line for this plugin's log in the Plugins page.
     pub fn log(&self, line: impl AsRef<str>) {
-        let line = line.as_ref();
-        // SAFETY: the pointer and length describe `line`, which outlives the call.
-        unsafe { log(line.as_ptr() as i32, line.len() as i32) }
+        log_line(line.as_ref());
     }
 
     /// The last context Agentty sent (workspace, pane, language).
     pub fn context(&self) -> Value {
         self.context.borrow().clone()
+    }
+
+    /// The language the user reads. Agentty sends it with `initialize` and again whenever it
+    /// changes, so a panel drawn after this is in the language the rest of the app is in.
+    pub fn language(&self) -> text::Lang {
+        text::Lang::of(self.context.borrow().get("language").and_then(Value::as_str).unwrap_or("en"))
     }
 
     /// Replaces the panel with this UI tree.
@@ -182,6 +260,35 @@ impl Host {
         self.call("prompt/inject", params)
     }
 
+    /// Starts a session for a piece of work: a new tab, named, with the agent of your choosing
+    /// (`claude`, `codex`; `None` for Agentty's default). The answer carries `paneId`, and that
+    /// pane's `pane/status` then reaches [`Plugin::pane_status`].
+    pub fn start_session(&self, title: impl Into<String>, agent: Option<&str>, text: impl Into<String>) -> u64 {
+        let mut params = json!({ "text": text.into(), "title": title.into(), "target": "newTab" });
+        if let Some(agent) = agent {
+            params["agent"] = json!(agent);
+        }
+        self.call("prompt/inject", params)
+    }
+
+    /// Sends the next prompt to a session already running in `pane`.
+    pub fn prompt_pane(&self, pane: u64, text: impl Into<String>) -> u64 {
+        self.call("prompt/inject", json!({ "text": text.into(), "target": "pane", "paneId": pane }))
+    }
+
+    /// Reads a session's conversation (needs `session.read`). The answer carries `turns`, newest
+    /// last; `max_turns` bounds how much comes back.
+    pub fn session(&self, pane: u64, max_turns: u64) -> u64 {
+        self.call("session/get", json!({ "paneId": pane, "maxTurns": max_turns }))
+    }
+
+    /// Waits. The answer arrives in [`Plugin::answer`] once `ms` have passed: a module runs only
+    /// while it is handling a message, so this is how it comes back to something later. 100 ms at
+    /// the shortest, an hour at the longest, eight waits at a time.
+    pub fn wait(&self, ms: u64) -> u64 {
+        self.call("host/timer", json!({ "ms": ms }))
+    }
+
     /// Reads what the plugin kept under `key`; the answer arrives in [`Plugin::answer`] as
     /// `{ key, value }`, with `value` null when nothing was stored.
     pub fn storage_get(&self, key: &str) -> u64 {
@@ -210,9 +317,7 @@ impl Host {
     }
 
     fn write(&self, message: &Value) {
-        let text = message.to_string();
-        // SAFETY: the pointer and length describe `text`, which outlives the call.
-        unsafe { send(text.as_ptr() as i32, text.len() as i32) }
+        send_text(&message.to_string());
     }
 
     fn reply(&self, id: &Value, result: Value) {
@@ -252,6 +357,53 @@ impl UiEvent {
 
     pub fn is_on(&self) -> bool {
         self.value.as_ref().and_then(Value::as_bool).unwrap_or(false)
+    }
+}
+
+/// How a pane this plugin started is getting on.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaneStatus {
+    pub pane_id: u64,
+    /// `working`, `idle`, `finished`, `permission`, `question`, `interrupted`, `exited`, `closed`.
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub agent: String,
+    /// What the session is called — the `title` the prompt was given. It is how a plugin tells
+    /// apart sessions the user placed itself, which arrive with no answer of their own.
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub cwd: String,
+}
+
+impl PaneStatus {
+    /// Whether the agent is doing something right now.
+    ///
+    /// A pane that has just been opened is `idle` too — it is idle until the agent it was given
+    /// picks the prompt up — so this is what says a prompt has actually been taken, and nothing
+    /// should be read as an answer before it has been true once.
+    pub fn is_busy(&self) -> bool {
+        matches!(self.status.as_str(), "working" | "thinking")
+    }
+
+    /// Whether the agent has stopped and is waiting for a person. Only an answer once
+    /// [`PaneStatus::is_busy`] has been true: see there.
+    pub fn is_done(&self) -> bool {
+        matches!(self.status.as_str(), "finished" | "idle" | "exited" | "closed" | "interrupted")
+    }
+
+    /// Whether the agent is asking for something and cannot go on alone.
+    pub fn needs_user(&self) -> bool {
+        matches!(self.status.as_str(), "permission" | "question")
+    }
+
+    /// Whether the pane is gone: no prompt will reach it again.
+    pub fn is_gone(&self) -> bool {
+        matches!(self.status.as_str(), "exited" | "closed")
     }
 }
 
@@ -396,6 +548,11 @@ impl Runner {
                 let path = params.get("path").and_then(Value::as_str).unwrap_or("").to_string();
                 let query = params.get("query").cloned().unwrap_or(Value::Null);
                 self.plugin.link(&self.host, &path, &query);
+            }
+            "pane/status" => {
+                if let Ok(status) = serde_json::from_value::<PaneStatus>(params.clone()) {
+                    self.plugin.pane_status(&self.host, status);
+                }
             }
             "context/changed" => {
                 let context = self.host.context();

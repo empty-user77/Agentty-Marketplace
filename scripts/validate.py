@@ -26,6 +26,10 @@ PLUGINS = ROOT / "plugins"
 INDEX = ROOT / "index.json"
 
 API_VERSION = 1
+# The plugin protocol the current Agentty speaks. An entry built against a newer one would be shown
+# to everyone as "needs a newer Agentty" and installable by nobody, so it is refused until Agentty
+# ships that protocol and this number moves with it.
+PLUGIN_API_VERSION = 2
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -115,6 +119,12 @@ def check(path: Path) -> dict:
     icon = entry.get("icon", "")
     if icon and (not isinstance(icon, str) or not ICON.match(icon)):
         raise Problem("icon is a name from Agentty's icon set")
+
+    api_version = entry.get("apiVersion", 1)
+    if not isinstance(api_version, int) or isinstance(api_version, bool):
+        raise Problem("apiVersion is a whole number")
+    if not 1 <= api_version <= PLUGIN_API_VERSION:
+        raise Problem(f"apiVersion is between 1 and {PLUGIN_API_VERSION} (the protocol Agentty speaks today)")
 
     surface = entry.get("surface", "pane")
     if surface not in SURFACES:
