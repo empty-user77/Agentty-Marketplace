@@ -125,7 +125,7 @@ static LOGO: [u8; 4096] = *include_bytes!("logo.png");
 ```
 
 The length has to match the file. Agentty keeps the picture only when it is a **PNG, JPEG, GIF or
-WebP**, actually is one (the bytes are checked, not a name), and is **under 512 KB**; otherwise the
+WebP**, actually is one (the bytes are checked, not a name), and is **512 KB at most**; otherwise the
 plugin keeps its `icon`. **An SVG is never drawn.** An SVG is a document, not a picture: the
 renderer resolves the addresses inside it, and one of those could be a file on the machine of
 whoever installed the plugin. Export a raster image instead.
