@@ -88,6 +88,11 @@ jobs:
 
       - name: Build each one again and compare it to its checksum
         if: steps.touched.outputs.entries != ''
+        env:
+          # Passed through the environment, not inlined into the script: `${{ }}` is substituted
+          # as raw text before bash ever sees it, so a multi-line value pasted straight into `run:`
+          # turns every line after the first into its own shell command instead of an argument.
+          ENTRIES: ${{ steps.touched.outputs.entries }}
         run: |
-          # Unquoted on purpose: one path per line, and an entry path has no spaces in it.
-          python3 scripts/verify_build.py ${{ steps.touched.outputs.entries }}
+          mapfile -t entries < <(grep -v '^$' <<< "$ENTRIES")
+          python3 scripts/verify_build.py "${entries[@]}"
