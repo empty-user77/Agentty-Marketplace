@@ -38,6 +38,7 @@ use serde_json::{json, Value};
 use std::cell::RefCell;
 
 pub mod agentos;
+pub mod task;
 pub mod text;
 pub mod ui;
 
@@ -120,7 +121,12 @@ fn send_text(text: &str) {
     host_stubs::send(text);
 }
 
-fn clock_ms() -> i64 {
+/// One message to Agentty, already JSON: what [`task`] sends its calls with.
+pub(crate) fn send_raw(message: &Value) {
+    send_text(&message.to_string());
+}
+
+pub(crate) fn clock_ms() -> i64 {
     #[cfg(target_arch = "wasm32")]
     // SAFETY: an import Agentty defines; it takes and returns plain numbers.
     unsafe {
@@ -174,6 +180,11 @@ pub trait Plugin: 'static {
     /// Agentty is closing the plugin.
     fn shutdown(&mut self, host: &Host) {
         let _ = host;
+    }
+    /// Any other notification from Agentty — `instance/open` and `instance/close` (the tabs of
+    /// the plugin's own workspace), `browser/hidden`, and whatever later versions add.
+    fn notification(&mut self, host: &Host, method: &str, params: &Value) {
+        let _ = (host, method, params);
     }
 }
 
@@ -343,6 +354,9 @@ pub struct UiEvent {
     /// The row button, when one was pressed.
     #[serde(default)]
     pub action: Option<String>,
+    /// In the plugin's own workspace: the automation (tab) whose panel it came from.
+    #[serde(default)]
+    pub instance: Option<String>,
 }
 
 impl UiEvent {
@@ -518,7 +532,12 @@ impl Runner {
                 Some(error) => Err(error.get("message").and_then(Value::as_str).unwrap_or("error").to_string()),
                 None => Ok(message.get("result").cloned().unwrap_or(Value::Null)),
             };
-            self.plugin.answer(&self.host, number, result);
+            // A task (`task::call`, `task::sleep`) waiting for it goes on; otherwise it is the
+            // plugin's own `Host::call`.
+            if !task::answered(number, result.clone()) {
+                self.plugin.answer(&self.host, number, result);
+                task::run();
+            }
             return;
         }
         if let Some(context) = params.get("context").filter(|context| !context.is_null()) {
@@ -559,8 +578,10 @@ impl Runner {
                 self.plugin.context(&self.host, &context);
             }
             "shutdown" => self.plugin.shutdown(&self.host),
-            other => self.host.log(format!("ignored {other}")),
+            other => self.plugin.notification(&self.host, other, &params),
         }
+        // Whatever the plugin started on this message gets its turn.
+        task::run();
         if let Some(id) = id.filter(|_| method != "initialize") {
             self.host.reply(&id, Value::Null);
         }
