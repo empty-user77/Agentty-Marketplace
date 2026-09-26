@@ -115,6 +115,42 @@ class Entries(unittest.TestCase):
             check(entry(mode="sideways"))
 
 
+class OfficialPlugins(unittest.TestCase):
+    """The marketplace's own plugins: their module is committed here, their source may be private."""
+
+    def official(self, **changes) -> dict:
+        data = entry(**{
+            "official": True,
+            "source": "https://github.com/someone/private-plugin",
+            "module": {"url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/hello-world-0.1.0.wasm", "sha256": "a" * 64, "size": 93292},
+            **changes,
+        })
+        del data["build"]
+        return data
+
+    def test_an_official_plugin_needs_no_build_block_or_public_source(self):
+        original = validate.served_here
+        validate.served_here = lambda _entry: Path("modules/hello-world-0.1.0.wasm")
+        try:
+            self.assertEqual(check(self.official())["id"], "hello-world")
+            self.assertEqual(check(self.official(source="https://example.com/hello"))["id"], "hello-world")
+        finally:
+            validate.served_here = original
+
+    def test_only_a_module_committed_here_makes_a_plugin_official(self):
+        original = validate.served_here
+        validate.served_here = lambda _entry: None
+        try:
+            with self.assertRaises(validate.Problem):
+                check(self.official())
+        finally:
+            validate.served_here = original
+
+    def test_official_is_true_or_false(self):
+        with self.assertRaises(validate.Problem):
+            check(entry(official="yes"))
+
+
 class HowTheModuleWasBuilt(unittest.TestCase):
     """An entry has to say where its module comes from, in enough detail to build it again."""
 

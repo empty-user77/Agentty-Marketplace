@@ -187,6 +187,16 @@ caught by this list on its own.
   work and send it somewhere: say plainly, in the description, why it needs both.
 - Anything that pretends to be another plugin, another publisher, or Agentty itself.
 
+## Official plugins
+
+The marketplace's own plugins are marked `"official": true`. What makes one official is where its
+module is: a file in `modules/` of this repository, which `module.url` points at. Only whoever can
+merge here can put one there, so an entry that merely says it is official is refused.
+
+An official plugin needs no `build` block and its `source` may be private: its module is reviewed
+where it is merged, not rebuilt from a public commit. Everything else is checked as for any entry —
+its shape, permissions, size and checksum against the file in `modules/`.
+
 ## Private plugins
 
 Nothing here is required to use a plugin. **Plugins → Install from Folder…** takes any folder, and

@@ -5,7 +5,9 @@
   "description": "One plugin offered in Agentty's Plugins page. scripts/validate.py checks more than this schema can say.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "name", "version", "description", "publisher", "license", "source", "build", "module"],
+  "required": ["id", "name", "version", "description", "publisher", "license", "source", "module"],
+  "if": { "not": { "required": ["official"], "properties": { "official": { "const": true } } } },
+  "then": { "required": ["build"] },
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$" },
     "name": { "type": "string", "minLength": 1, "maxLength": 60 },
@@ -13,16 +15,20 @@
     "description": { "type": "string", "minLength": 1, "maxLength": 300 },
     "publisher": { "type": "string", "minLength": 1, "maxLength": 60 },
     "license": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "official": {
+      "description": "The marketplace's own plugin: its module is a file in modules/ of this repository, which only maintainers can merge, so it needs no build block and its source may be private.",
+      "type": "boolean"
+    },
     "source": { "type": "string", "format": "uri", "pattern": "^https://" },
     "homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
     "icon": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
     "keywords": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 30 } },
     "surface": { "enum": ["sidebar", "pane", "status"] },
-    "mode": { "enum": ["push", "overlay", "window", "full"] },
+    "mode": { "enum": ["push", "overlay", "window", "full", "workspace"] },
     "permissions": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "enum": ["net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read"] }
+      "items": { "enum": ["net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files"] }
     },
     "build": {
       "description": "Where the module is built from. CI clones this commit, builds it with the pinned Rust, and refuses the entry unless the bytes hash to module.sha256.",
