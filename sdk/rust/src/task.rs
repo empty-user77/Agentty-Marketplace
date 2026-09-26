@@ -35,14 +35,22 @@ thread_local! {
     /// When each sleeping task wants to wake (ms), by a number of its own.
     static SLEEPS: RefCell<BTreeMap<u64, i64>> = const { RefCell::new(BTreeMap::new()) };
     static NEXT_SLEEP: Cell<u64> = const { Cell::new(1) };
-    /// The `host/timer` calls in the air, and when the earliest of them fires.
+    /// The `host/timer` calls in the air.
     static TIMERS: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
-    static ARMED_FOR: Cell<Option<i64>> = const { Cell::new(None) };
+    /// The one timer that counts — its id and when it fires. Older ones still in the air only
+    /// wake the tasks when they land; they never make another.
+    static ARMED: Cell<Option<(u64, i64)>> = const { Cell::new(None) };
 }
 
-/// Shortest and longest wait Agentty takes.
+/// Shortest wait Agentty takes.
 const MIN_TIMER_MS: i64 = 100;
-const MAX_TIMER_MS: i64 = 3_600_000;
+/// Longest one asked for at a time. A timer cannot be taken back, so one armed for a long sleep and
+/// then overtaken by a shorter one stays in the air until it fires; kept short, those die off in a
+/// second instead of piling up. (Agentty lets a plugin have 8 in the air and refuses the ninth at
+/// once — and a refused timer asked again at once was a flood that got the plugin stopped.)
+const MAX_TIMER_MS: i64 = 1_000;
+/// Timers this module keeps in the air at most, well under Agentty's 8.
+const MAX_TIMERS_IN_AIR: usize = 4;
 
 /// Runs `future` alongside the plugin's other tasks.
 pub fn spawn(future: impl Future<Output = ()> + 'static) {
@@ -84,7 +92,12 @@ pub fn run() {
 /// of the timers), which then runs on.
 pub fn answered(id: u64, result: Result<Value, String>) -> bool {
     if TIMERS.with(|t| t.borrow_mut().remove(&id)) {
-        ARMED_FOR.with(|a| a.set(None));
+        if ARMED
+            .with(|a| a.get())
+            .is_some_and(|(armed, _)| armed == id)
+        {
+            ARMED.with(|a| a.set(None));
+        }
         run();
         return true;
     }
@@ -159,24 +172,47 @@ impl Drop for Sleep {
 }
 
 /// Keeps one `host/timer` in the air for the earliest sleeper.
+///
+/// A timer is never shorter than `MIN_TIMER_MS`, so one armed for a sleeper due sooner than that
+/// fires after it: that timer is still the right one, and no other is made. (Comparing against the
+/// sleeper's own time sent a new timer with every message the plugin got, and a busy plugin soon had
+/// hundreds a second in the air — enough for Agentty to stop it for flooding.)
 fn arm() {
-    let Some(earliest) = SLEEPS.with(|s| s.borrow().values().min().copied()) else { return };
-    if ARMED_FOR.with(|a| a.get()).is_some_and(|armed| armed <= earliest) {
+    let Some(earliest) = SLEEPS.with(|s| s.borrow().values().min().copied()) else {
+        return;
+    };
+    let now = crate::clock_ms();
+    let wanted = earliest.max(now + MIN_TIMER_MS);
+    if ARMED
+        .with(|a| a.get())
+        .is_some_and(|(_, fires)| fires <= wanted)
+    {
         return;
     }
-    let ms = (earliest - crate::clock_ms()).clamp(MIN_TIMER_MS, MAX_TIMER_MS);
+    // Enough in the air already: the next of them to land wakes the tasks and arms again.
+    if TIMERS.with(|t| t.borrow().len()) >= MAX_TIMERS_IN_AIR {
+        return;
+    }
+    let ms = (wanted - now).clamp(MIN_TIMER_MS, MAX_TIMER_MS);
     let id = NEXT_ID.with(|n| {
         let id = n.get();
         n.set(id + 1);
         id
     });
     TIMERS.with(|t| t.borrow_mut().insert(id));
-    ARMED_FOR.with(|a| a.set(Some(crate::clock_ms() + ms)));
-    crate::send_raw(&json!({ "jsonrpc": "2.0", "id": id, "method": "host/timer", "params": { "ms": ms } }));
+    ARMED.with(|a| a.set(Some((id, now + ms))));
+    crate::send_raw(
+        &json!({ "jsonrpc": "2.0", "id": id, "method": "host/timer", "params": { "ms": ms } }),
+    );
 }
 
 fn noop_waker() -> Waker {
-    const VTABLE: RawWakerVTable = RawWakerVTable::new(|_| RawWaker::new(std::ptr::null(), &VTABLE), |_| {}, |_| {}, |_| {});
+    const VTABLE: RawWakerVTable = RawWakerVTable::new(
+        |_| RawWaker::new(std::ptr::null(), &VTABLE),
+        |_| {},
+        |_| {},
+        |_| {},
+    );
     // SAFETY: every function of the table does nothing with the (null) data pointer.
     unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }
 }
@@ -209,11 +245,88 @@ mod tests {
         let timers = host_stubs::taken();
         assert_eq!(timers.len(), 1);
         assert_eq!(timers[0]["method"], "host/timer");
-        assert_eq!(timers[0]["params"]["ms"], 5_000);
+        assert_eq!(timers[0]["params"]["ms"], MAX_TIMER_MS);
         host_stubs::set_clock(6_000);
         assert!(answered(timers[0]["id"].as_u64().unwrap(), Ok(Value::Null)));
         assert_eq!(log.borrow().len(), 2);
-        assert!(!answered(424_242, Ok(Value::Null)), "an answer nobody waits for is the plugin's own");
+        assert!(
+            !answered(424_242, Ok(Value::Null)),
+            "an answer nobody waits for is the plugin's own"
+        );
+    }
+
+    #[test]
+    fn a_short_sleep_gets_one_timer_however_many_messages_come() {
+        host_stubs::set_clock(10_000);
+        let _ = host_stubs::taken();
+        let woke = Rc::new(Cell::new(false));
+        let flag = woke.clone();
+        spawn(async move {
+            sleep(30).await;
+            flag.set(true);
+        });
+        // A busy plugin: answers keep arriving while the short sleeper waits.
+        for i in 0..50 {
+            spawn(async move {
+                let _ = call("files/stat", json!({ "i": i })).await;
+            });
+        }
+        let mut sent = host_stubs::taken();
+        let calls: Vec<Value> = sent
+            .iter()
+            .filter(|m| m["method"] == "files/stat")
+            .cloned()
+            .collect();
+        for call in &calls {
+            answered(call["id"].as_u64().unwrap(), Ok(Value::Null));
+        }
+        sent.extend(host_stubs::taken());
+        let timers: Vec<Value> = sent
+            .into_iter()
+            .filter(|m| m["method"] == "host/timer")
+            .collect();
+        assert_eq!(
+            timers.len(),
+            1,
+            "one timer for the sleeper, not one a message: {timers:?}"
+        );
+        assert_eq!(timers[0]["params"]["ms"], MIN_TIMER_MS);
+        host_stubs::set_clock(10_100);
+        answered(timers[0]["id"].as_u64().unwrap(), Ok(Value::Null));
+        assert!(woke.get());
+        assert!(
+            host_stubs::taken()
+                .iter()
+                .all(|m| m["method"] != "host/timer"),
+            "nobody sleeps: no timer"
+        );
+    }
+
+    #[test]
+    fn timers_in_the_air_stay_few_however_often_sleepers_overtake_each_other() {
+        host_stubs::set_clock(50_000);
+        let _ = host_stubs::taken();
+        // Ever shorter sleeps, each overtaking the one before: a timer each, up to the cap.
+        for ms in [900_u64, 800, 700, 600, 500, 400, 300, 200] {
+            spawn(async move {
+                sleep(ms).await;
+            });
+        }
+        let timers: Vec<Value> = host_stubs::taken()
+            .into_iter()
+            .filter(|m| m["method"] == "host/timer")
+            .collect();
+        assert_eq!(timers.len(), MAX_TIMERS_IN_AIR, "{timers:?}");
+        // A refused timer is not asked again at once while others are in the air.
+        answered(
+            timers[0]["id"].as_u64().unwrap(),
+            Err("more than 8 waits at once".into()),
+        );
+        let again: Vec<Value> = host_stubs::taken()
+            .into_iter()
+            .filter(|m| m["method"] == "host/timer")
+            .collect();
+        assert!(again.len() <= 1, "{again:?}");
     }
 
     #[test]
@@ -237,8 +350,8 @@ mod tests {
             answered(timer["id"].as_u64().unwrap(), Ok(Value::Null));
         }
         assert_eq!(done.get(), 3);
-        // The two-hour sleeper waits in hour-long pieces.
+        // The two-hour sleeper waits in pieces of at most a second.
         let next = host_stubs::taken();
-        assert_eq!(next.last().unwrap()["params"]["ms"], 3_600_000);
+        assert_eq!(next.last().unwrap()["params"]["ms"], MAX_TIMER_MS);
     }
 }
