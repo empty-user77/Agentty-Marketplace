@@ -33,7 +33,7 @@ API_VERSION = 1
 # The plugin protocol the current Agentty speaks. An entry built against a newer one would be shown
 # to everyone as "needs a newer Agentty" and installable by nobody, so it is refused until Agentty
 # ships that protocol and this number moves with it.
-PLUGIN_API_VERSION = 2
+PLUGIN_API_VERSION = 3
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$")
 VERSION = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -48,9 +48,9 @@ REPO_PATH = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]{1,200}$")
 
 # What Agentty knows how to ask the user about. A plugin naming anything else would be installed
 # with a permission nobody can explain.
-PERMISSIONS = {"net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read"}
+PERMISSIONS = {"net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files"}
 SURFACES = {"sidebar", "pane", "status"}
-MODES = {"push", "overlay", "window", "full"}
+MODES = {"push", "overlay", "window", "full", "workspace"}
 
 # A module is served from a release of a repository, not from someone's server: a release asset
 # cannot be replaced without the URL changing, and these hosts are the ones GitHub serves them on.
@@ -185,8 +185,13 @@ def check(path: Path) -> dict:
     if not isinstance(entry, dict):
         raise Problem("an entry is a JSON object")
 
+    # An official plugin is the marketplace's own: its module is committed to this repository, so
+    # only whoever can merge here can publish one, and its source need not be public.
+    official = entry.get("official", False)
+    if not isinstance(official, bool):
+        raise Problem("official is true or false")
     for field in REQUIRED:
-        if field not in entry:
+        if field not in entry and not (official and field == "build"):
             raise Problem(f"{field} is required")
 
     plugin_id = entry["id"]
@@ -204,7 +209,7 @@ def check(path: Path) -> dict:
     text(entry, "license", 40)
 
     host = url_host(entry["source"], "source")
-    if host not in SOURCE_HOSTS:
+    if host not in SOURCE_HOSTS and not official:
         raise Problem(f"source is on {host}; a plugin here is open source on {', '.join(sorted(SOURCE_HOSTS))}")
     if "homepage" in entry:
         url_host(entry["homepage"], "homepage")
@@ -257,7 +262,15 @@ def check(path: Path) -> dict:
     if not isinstance(size, int) or not 0 < size <= MAX_MODULE_BYTES:
         raise Problem(f"module.size is the size in bytes, up to {MAX_MODULE_BYTES // 1024 // 1024} MB")
 
-    check_build(entry)
+    if official:
+        # Served from modules/ in this repository and nowhere else: what makes it official is
+        # that it was merged here, not that the entry says so.
+        if served_here(entry) is None:
+            raise Problem("an official plugin's module is a file in modules/ of this repository, and module.url points at it")
+        if "build" in entry:
+            check_build(entry)
+    else:
+        check_build(entry)
 
     # A plugin that both reads the user's work and sends requests out can carry it away. It is
     # allowed, and it is said out loud.
@@ -363,7 +376,8 @@ def main() -> int:
     for path in entries():
         try:
             entry = check(path)
-            if args.source:
+            # An official plugin's source may be private: its module is reviewed where it is merged.
+            if args.source and not entry.get("official"):
                 source_is_public(entry)
             if args.download:
                 download(entry)

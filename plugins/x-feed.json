@@ -1,0 +1,50 @@
+{
+  "id": "x-feed",
+  "name": "X Feed",
+  "version": "1.0.0",
+  "publisher": "Agentty",
+  "description": "Automate X from the in-app browser: follow accounts or keywords, save their posts with images and videos, like, repost and reply at a safe pace, and post drafts in your own voice. One tab per automation.",
+  "icon": "x-twitter",
+  "license": "Proprietary",
+  "official": true,
+  "source": "https://github.com/empty-user77/agentty-social-manager",
+  "homepage": "https://github.com/empty-user77/agentty-social-manager",
+  "keywords": [
+    "x",
+    "twitter",
+    "automation",
+    "social",
+    "browser",
+    "wasm"
+  ],
+  "apiVersion": 3,
+  "surface": "sidebar",
+  "mode": "workspace",
+  "permissions": [
+    "browser.control",
+    "prompt.inject",
+    "files",
+    "net.request"
+  ],
+  "browser": {
+    "sites": [
+      {
+        "host": "x.com",
+        "aliases": [
+          "twitter.com"
+        ],
+        "home": "https://x.com/home",
+        "signIn": "https://x.com/i/flow/login",
+        "signedInCookie": "auth_token"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartup"
+  ],
+  "module": {
+    "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/x-feed-1.0.0.wasm",
+    "sha256": "47468861a41718bf4acb5d0dd3418497a38f8c65b12637917f14ce214c8e82a7",
+    "size": 1047553
+  }
+}
