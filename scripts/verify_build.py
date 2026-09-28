@@ -149,6 +149,12 @@ def manifest(entry: dict, checkout: Path) -> list[str]:
             f"      entry:     {sorted(entry.get('permissions', [])) or 'none'}\n"
             f"      manifest:  {sorted(declared.get('permissions', [])) or 'none'}"
         )
+    if sorted(declared.get("agents", [])) != sorted(entry.get("agents", [])):
+        raise Problem(
+            "the entry and agentty-plugin.json name different agents.\n"
+            f"      entry:     {sorted(entry.get('agents', [])) or 'none'}\n"
+            f"      manifest:  {sorted(declared.get('agents', [])) or 'none'}"
+        )
 
     notes = []
     if not any((checkout / name).is_file() for name in LICENCE_FILES):
@@ -197,6 +203,10 @@ def build(entry: dict, checkout: Path, cargo: Path) -> bytes:
 
 def verify(path: Path, write: bool) -> None:
     entry = validate.check(path)
+    if entry.get("official") and "build" not in entry:
+        # Its source is the publisher's own and may be private; the module is the file merged here.
+        print(f"  ok  {path.name}: official, served from modules/ (not rebuilt)")
+        return
     with tempfile.TemporaryDirectory(prefix="agentty-build-") as folder:
         checkout, cargo = Path(folder) / "source", Path(folder) / "cargo"
         cargo.mkdir()
