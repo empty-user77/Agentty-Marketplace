@@ -115,8 +115,8 @@
       ],
       "module": {
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/x-feed-1.0.0.wasm",
-        "sha256": "47468861a41718bf4acb5d0dd3418497a38f8c65b12637917f14ce214c8e82a7",
-        "size": 1047553
+        "sha256": "3c3c12c0b1e4c82750ff207e7b9597a233756b5efc314ab95893e19d6c447358",
+        "size": 1048559
       }
     }
   ]
