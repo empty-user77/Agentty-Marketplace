@@ -85,6 +85,18 @@ class Entries(unittest.TestCase):
             check(entry(permissions=["net.request", "net.request"]))
         self.assertEqual(check(entry(permissions=["net.request"]))["permissions"], ["net.request"])
 
+    def test_agents_are_ones_agentty_can_start(self):
+        # Left out: a plugin that starts no agent.
+        self.assertNotIn("agents", check(entry()))
+        inject = ["prompt.inject"]
+        self.assertEqual(check(entry(permissions=inject, agents=["claude", "codex"]))["agents"], ["claude", "codex"])
+        for bad in [["gemini"], [], ["claude", "claude"], "claude", [1]]:
+            with self.assertRaises(validate.Problem):
+                check(entry(permissions=inject, agents=bad))
+        # Agents are started through prompt.inject; without it the list promises nothing.
+        with self.assertRaises(validate.Problem):
+            check(entry(agents=["claude"]))
+
     def test_reading_the_users_work_and_sending_requests_is_explained(self):
         both = ["net.request", "session.read"]
         with self.assertRaises(validate.Problem):

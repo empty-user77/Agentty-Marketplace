@@ -30,6 +30,13 @@
       "uniqueItems": true,
       "items": { "enum": ["net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files"] }
     },
+    "agents": {
+      "description": "The AI agents the plugin can start through prompt.inject, any one of which it needs installed: the ids Agentty's agent/list gives.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["claude", "codex"] }
+    },
     "build": {
       "description": "Where the module is built from. CI clones this commit, builds it with the pinned Rust, and refuses the entry unless the bytes hash to module.sha256.",
       "type": "object",

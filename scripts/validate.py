@@ -51,6 +51,9 @@ REPO_PATH = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]{1,200}$")
 PERMISSIONS = {"net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files"}
 SURFACES = {"sidebar", "pane", "status"}
 MODES = {"push", "overlay", "window", "full", "workspace"}
+# The agents Agentty can start for a plugin (the ids `agent/list` gives). An entry names the ones it
+# works with, so people can tell before installing whether it works with the agent they have.
+AGENTS = {"claude", "codex"}
 
 # A module is served from a release of a repository, not from someone's server: a release asset
 # cannot be replaced without the URL changing, and these hosts are the ones GitHub serves them on.
@@ -246,6 +249,19 @@ def check(path: Path) -> dict:
         raise Problem(f"unknown permission(s): {', '.join(map(str, unknown))}")
     if len(set(permissions)) != len(permissions):
         raise Problem("a permission is listed twice")
+
+    if "agents" in entry:
+        agents = entry["agents"]
+        if not isinstance(agents, list) or not agents:
+            raise Problem(f"agents is a list of one or more of {', '.join(sorted(AGENTS))}")
+        unknown = [a for a in agents if a not in AGENTS]
+        if unknown:
+            raise Problem(f"unknown agent(s): {', '.join(map(str, unknown))}; Agentty starts {', '.join(sorted(AGENTS))}")
+        if len(set(agents)) != len(agents):
+            raise Problem("an agent is listed twice")
+        # A plugin starts agents only through prompt.inject: without it, the list promises nothing.
+        if "prompt.inject" not in permissions:
+            raise Problem("agents are started through prompt.inject: ask for it, or leave agents out")
 
     module = entry["module"]
     if not isinstance(module, dict):

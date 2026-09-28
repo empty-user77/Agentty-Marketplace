@@ -26,6 +26,10 @@
     "files",
     "net.request"
   ],
+  "agents": [
+    "claude",
+    "codex"
+  ],
   "browser": {
     "sites": [
       {

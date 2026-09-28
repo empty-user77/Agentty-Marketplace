@@ -102,6 +102,7 @@ did — see [Reproducible builds](#reproducible-builds).
 | `surface` | where its icon sits: `sidebar`, `pane` (default) or `status` |
 | `mode` | how its panel opens: `push` (default), `overlay`, `window` or `full` |
 | `permissions` | what it asks for — Agentty shows these before anyone installs it |
+| `agents` | optional; the AI agents it can start, any one of which it needs installed: `claude`, `codex`. Only with `prompt.inject`, which is how a plugin starts them. Leave it out for a plugin that starts none |
 | `module.url` | `https://` on `github.com`, `raw.githubusercontent.com` or `objects.githubusercontent.com`. Put the version in the path so a release cannot be swapped underneath — that is a convention, not something CI checks |
 | `module.sha256` | the module's checksum. Agentty refuses a download that does not match, and refuses bytes that are not a WebAssembly module even when it does |
 | `module.size` | its exact length in bytes, up to 8 MB. Not a ceiling: a download of any other length is refused, so this changes with every build |
@@ -148,7 +149,7 @@ the two are only connected by whoever uploaded them. So CI connects them itself:
 1. It clones `build.repository` at `build.rev`. A commit, not a tag: a tag can be pointed at other
    code the day after the review, and a branch moves on its own.
 2. It reads `agentty-plugin.json` at `build.path` and checks it agrees with the entry — same id,
-   same version, same `apiVersion`, the same permissions. The entry is what Agentty shows people;
+   same version, same `apiVersion`, the same permissions and agents. The entry is what Agentty shows people;
    the manifest is what the plugin actually is, and they are not allowed to disagree.
 3. It builds it with `cargo build --release --locked --offline --target wasm32-unknown-unknown`,
    inside a `rust` image pinned by digest, with `RUSTUP_TOOLCHAIN` forced to the marketplace's Rust
