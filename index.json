@@ -72,7 +72,7 @@
     {
       "id": "x-feed",
       "name": "X Feed",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "publisher": "Agentty",
       "description": "Automate X from the in-app browser: follow accounts or keywords, save their posts with images and videos, like, repost and reply at a safe pace, and post drafts in your own voice. One tab per automation.",
       "icon": "x-twitter",
@@ -118,9 +118,9 @@
         "onStartup"
       ],
       "module": {
-        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/x-feed-1.0.4.wasm",
-        "sha256": "5953a423a038c21b7c6c6a7d0010c1cfbfbd884ab5a4e0ec5f9e52e579334e52",
-        "size": 1051433
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/x-feed-1.0.5.wasm",
+        "sha256": "d9f38de58d3f0d9eb208b5bcab58152c1a9795165aacf0e44a892b00f104cf2f",
+        "size": 1083350
       }
     }
   ]
