@@ -96,11 +96,40 @@ pub fn grid(columns: usize, children: Vec<Value>) -> Value {
     json!({ "type": "grid", "columns": columns.clamp(1, 6), "children": children })
 }
 
+/// Columns of set widths: `"240px"` is fixed, `"2"` takes twice the share of a `"1"`. A sidebar
+/// beside a page is `ui::split(&["240px", "1"], vec![sidebar, page])`.
+pub fn split(widths: &[&str], children: Vec<Value>) -> Value {
+    json!({ "type": "grid", "widths": widths, "children": children })
+}
+
 /// A tab strip of `(id, label)`. `children` is only the picked tab's content; picking another
 /// sends `change` with its id.
 pub fn tabs(id: impl Into<String>, tabs: &[(&str, &str)], value: impl Into<String>, children: Vec<Value>) -> Value {
     let tabs: Vec<Value> = tabs.iter().map(|(id, label)| json!({ "id": id, "label": label })).collect();
     json!({ "type": "tabs", "id": id.into(), "tabs": tabs, "value": value.into(), "children": children })
+}
+
+/// Tabs with a close button each: closing one sends `close` with its id as `value`, picking one
+/// sends `change`.
+pub fn closable_tabs(id: impl Into<String>, tabs: &[(&str, &str)], value: impl Into<String>, children: Vec<Value>) -> Value {
+    let tabs: Vec<Value> = tabs.iter().map(|(id, label)| json!({ "id": id, "label": label, "closable": true })).collect();
+    json!({ "type": "tabs", "id": id.into(), "tabs": tabs, "value": value.into(), "children": children })
+}
+
+/// A row of a tree in a [`list`]: indented `depth` levels (0 to 8), with a short colored `tag`
+/// before the title (an HTTP method, a status) in `tone` — empty for none.
+pub fn tree_item(id: impl Into<String>, title: impl Into<String>, depth: u8, tag: &str, tone: &str) -> Value {
+    let mut item = json!({ "id": id.into(), "title": title.into(), "depth": depth.min(8) });
+    if !tag.is_empty() {
+        item["tag"] = json!(tag);
+        item["tagTone"] = json!(tone);
+    }
+    item
+}
+
+/// A text area in the monospace font, for code, JSON or a script (at most 24 rows).
+pub fn code_area(id: impl Into<String>, placeholder: impl Into<String>, value: impl Into<String>, rows: usize) -> Value {
+    json!({ "type": "input", "id": id.into(), "placeholder": placeholder.into(), "value": value.into(), "rows": rows.clamp(2, 24), "mono": true })
 }
 
 /// Rows under column headings. A click on a row sends `select` with its id as `item`. Set a
@@ -165,6 +194,17 @@ pub fn code(text: impl Into<String>, language: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layout_builders() {
+        let page = split(&["240px", "1"], vec![list("tree", vec![tree_item("r1", "Create vehicle", 2, "POST", "warning"), tree_item("f", "vehicles", 1, "", "")], ""), code_area("body", "{}", "", 40)]);
+        assert_eq!(page["widths"][0], "240px");
+        assert_eq!(page["children"][0]["items"][0]["tagTone"], "warning");
+        assert!(page["children"][0]["items"][1].get("tag").is_none());
+        assert_eq!((page["children"][1]["mono"].as_bool(), page["children"][1]["rows"].as_u64()), (Some(true), Some(24)));
+        let t = closable_tabs("tabs", &[("a", "GET Users")], "a", vec![]);
+        assert_eq!(t["tabs"][0]["closable"], true);
+    }
 
     #[test]
     fn nodes_carry_their_type() {

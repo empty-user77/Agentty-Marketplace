@@ -95,6 +95,21 @@ ui::column(vec![
 ])
 ```
 
+A tool laid out like a desktop app — a sidebar beside a page, a tree of requests with their
+methods, closable tabs, a JSON body — uses `split`, `tree_item`, `closable_tabs` and `code_area`:
+
+```rust
+ui::split(&["240px", "1"], vec![
+    ui::list("tree", vec![
+        ui::tree_item("vehicles", "vehicles", 0, "", ""),
+        ui::tree_item("create", "Create vehicle", 1, "POST", "warning"),
+    ], ""),
+    ui::closable_tabs("requests", &[("create", "POST Create vehicle")], "create", vec![
+        ui::code_area("body", "{ }", "{\"make\": \"Volvo\"}", 8),
+    ]),
+])
+```
+
 Which element to use for what, and whole screens to start from:
 [Designing a panel](https://www.agentty.run/docs/plugin-ui-guide), and the **UI Gallery** plugin
 that comes with Agentty.
