@@ -1,0 +1,37 @@
+{
+  "id": "agentty-image-composition",
+  "name": "Image Composer",
+  "version": "0.1.0",
+  "publisher": "Agentty",
+  "description": "Compose images as a node graph: drop a base picture and additions, press Run, and your own Claude Code or Codex makes the result. Redo with feedback; every version is kept. files: the pictures; prompt.inject: start the agent; workspace.read: only to know when it finished.",
+  "icon": "image",
+  "license": "Proprietary",
+  "official": true,
+  "source": "https://github.com/empty-user77/agentty-image-composition",
+  "homepage": "https://github.com/empty-user77/agentty-image-composition",
+  "keywords": [
+    "image",
+    "composition",
+    "edit",
+    "try-on",
+    "graph",
+    "wasm"
+  ],
+  "apiVersion": 5,
+  "surface": "sidebar",
+  "mode": "workspace",
+  "permissions": [
+    "files",
+    "prompt.inject",
+    "workspace.read"
+  ],
+  "agents": [
+    "claude",
+    "codex"
+  ],
+  "module": {
+    "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agentty-image-composition-0.1.0.wasm",
+    "sha256": "242ff440edb7af993247504be70d1ae547dafaf9e25012342bba371570671b5b",
+    "size": 348497
+  }
+}
