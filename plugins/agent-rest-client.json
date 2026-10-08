@@ -1,7 +1,7 @@
 {
   "id": "agent-rest-client",
   "name": "Agentty Rest Client",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "Agentty",
   "description": "A Postman-style API client: collections, environments with variable suggestions, pm.* scripts and tests, a collection runner, E2E flows that chain responses, load tests, OpenAPI and Postman import/export, cookies, a proxy, and Agentty AI.",
   "icon": "send",
@@ -19,7 +19,7 @@
     "load-test",
     "wasm"
   ],
-  "apiVersion": 3,
+  "apiVersion": 5,
   "surface": "sidebar",
   "mode": "workspace",
   "permissions": [
@@ -33,8 +33,8 @@
     "codex"
   ],
   "module": {
-    "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-1.2.0.wasm",
-    "sha256": "eb4f3b4a6e37531c939d81aefd0c92ca80ae72bd0806ad04c77423ca007bf48b",
+    "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/agent-rest-client-1.2.1.wasm",
+    "sha256": "e6d5fb73816a90dd6bcb614bfd83f0ebb63ddb1e2a9624a2985ef78f646907cd",
     "size": 2625776
   }
 }
