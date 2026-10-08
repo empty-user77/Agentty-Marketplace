@@ -74,6 +74,46 @@ cp target/wasm32-unknown-unknown/release/hello.wasm hello.wasm
 Put the module next to `agentty-plugin.json`, then **Plugins → Install from Folder…** in Agentty
 and pick the folder. **Restart** on the plugin's page picks up a new build.
 
+## The panel
+
+`ui::` builds the tree Agentty draws: `column`, `row`, `section`, `text`, `button`, `input`,
+`textarea`, `list`, `choice`, `toggle`, `badge`, `spinner`, `divider`, and from plugin API 4
+`card`, `grid`, `tabs`, `table`, `key_value`, `stat`, `progress`, `callout`, `select`, `checkbox`
+and `code` — say `"apiVersion": 4` in `agentty-plugin.json` when you use those. Optional fields go
+on with `ui::with`:
+
+```rust
+ui::column(vec![
+    ui::grid(2, vec![
+        ui::with(ui::stat("Passed", "128"), "tone", "success"),
+        ui::with(ui::stat("Failed", "2"), "tone", "error"),
+    ]),
+    ui::card("Latest run", vec![
+        ui::key_value(vec![ui::pair("Branch", "main"), ui::with(ui::pair("Commit", "ebfe735"), "mono", true)]),
+        ui::progress(0.6, "Running tests"),
+    ]),
+])
+```
+
+A tool laid out like a desktop app — a sidebar beside a page, a tree of requests with their
+methods, closable tabs, a JSON body — uses `split`, `tree_item`, `closable_tabs` and `code_area`:
+
+```rust
+ui::split(&["240px", "1"], vec![
+    ui::list("tree", vec![
+        ui::tree_item("vehicles", "vehicles", 0, "", ""),
+        ui::tree_item("create", "Create vehicle", 1, "POST", "warning"),
+    ], ""),
+    ui::closable_tabs("requests", &[("create", "POST Create vehicle")], "create", vec![
+        ui::code_area("body", "{ }", "{\"make\": \"Volvo\"}", 8),
+    ]),
+])
+```
+
+Which element to use for what, and whole screens to start from:
+[Designing a panel](https://www.agentty.run/docs/plugin-ui-guide), and the **UI Gallery** plugin
+that comes with Agentty.
+
 ## What the host gives you
 
 | `Host` | |
