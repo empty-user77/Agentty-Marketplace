@@ -48,7 +48,11 @@ REPO_PATH = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[A-Za-z0-9._/-]{1,200}$")
 
 # What Agentty knows how to ask the user about. A plugin naming anything else would be installed
 # with a permission nobody can explain.
-PERMISSIONS = {"net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files"}
+PERMISSIONS = {"net.request", "prompt.inject", "terminal.write", "session.read", "workspace.read", "browser.control", "files", "mcp.tools"}
+# Tools a plugin offers agents through Agentty's MCP server (`mcp.tools`, plugin API 5): what
+# Agentty's own manifest check allows, so an entry that passes here also installs.
+MAX_TOOLS = 32
+TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
 SURFACES = {"sidebar", "pane", "status"}
 MODES = {"push", "overlay", "window", "full", "workspace"}
 # The agents Agentty can start for a plugin (the ids `agent/list` gives). An entry names the ones it
@@ -262,6 +266,29 @@ def check(path: Path) -> dict:
         # A plugin starts agents only through prompt.inject: without it, the list promises nothing.
         if "prompt.inject" not in permissions:
             raise Problem("agents are started through prompt.inject: ask for it, or leave agents out")
+
+    tools = entry.get("tools", [])
+    if not isinstance(tools, list) or len(tools) > MAX_TOOLS:
+        raise Problem(f"tools is a list of at most {MAX_TOOLS}")
+    if bool(tools) != ("mcp.tools" in permissions):
+        raise Problem("tools and the mcp.tools permission come together")
+    if tools and api_version < 5:
+        raise Problem("tools need plugin API 5: set apiVersion to 5")
+    names = set()
+    for tool in tools:
+        if not isinstance(tool, dict) or not TOOL_NAME.match(str(tool.get("name", ""))):
+            raise Problem("every tool has a name of a-z, 0-9 and '_'")
+        if tool["name"] in names:
+            raise Problem(f"the tool {tool['name']} is listed twice")
+        names.add(tool["name"])
+        description = tool.get("description")
+        if not isinstance(description, str) or not description.strip() or len(description) > 1000:
+            raise Problem(f"the tool {tool['name']} says what it does, in up to 1000 characters")
+        schema = tool.get("inputSchema", {"type": "object"})
+        if not isinstance(schema, dict) or schema.get("type") != "object":
+            raise Problem(f"the inputSchema of {tool['name']} is an object schema (\"type\": \"object\")")
+        if len(json.dumps(schema)) > 16 * 1024:
+            raise Problem(f"the inputSchema of {tool['name']} is larger than 16 KB")
 
     module = entry["module"]
     if not isinstance(module, dict):

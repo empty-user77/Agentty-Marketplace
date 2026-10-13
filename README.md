@@ -103,6 +103,8 @@ did — see [Reproducible builds](#reproducible-builds).
 | `mode` | how its panel opens: `push` (default), `overlay`, `window` or `full` |
 | `permissions` | what it asks for — Agentty shows these before anyone installs it |
 | `agents` | optional; the AI agents it can start, any one of which it needs installed: `claude`, `codex`. Only with `prompt.inject`, which is how a plugin starts them. Leave it out for a plugin that starts none |
+| `tools` | optional; tools the plugin answers AI agents with through Agentty's MCP server, as in `contributes.tools` of its `agentty-plugin.json`: up to 32 of `{name, description, inputSchema, readOnly}`. Only with the `mcp.tools` permission and `apiVersion` 5 |
+| `activationEvents` | optional; `["onStartup"]` starts the plugin with Agentty. Nothing else is taken |
 | `module.url` | `https://` on `github.com`, `raw.githubusercontent.com` or `objects.githubusercontent.com`. Put the version in the path so a release cannot be swapped underneath — that is a convention, not something CI checks |
 | `module.sha256` | the module's checksum. Agentty refuses a download that does not match, and refuses bytes that are not a WebAssembly module even when it does |
 | `module.size` | its exact length in bytes, up to 8 MB. Not a ceiling: a download of any other length is refused, so this changes with every build |
