@@ -1,6 +1,6 @@
 {
   "apiVersion": 1,
-  "updated": "2026-10-13T09:09:12Z",
+  "updated": "2026-10-13T14:01:22Z",
   "plugins": [
     {
       "id": "agent-rest-client",
@@ -113,7 +113,7 @@
     {
       "id": "knowledge-base",
       "name": "Knowledge Base",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "publisher": "Agentty",
       "description": "Knowledge graph of repos: API flowcharts, tables, docs, kb_* tools for Claude Code and Codex. terminal.write, prompt.inject: start its local server agentty-kb, installed from agentty-kb-releases if missing. net.request: only that server on 127.0.0.1. workspace.read, session.read: sent only there.",
       "icon": "network",
@@ -389,9 +389,9 @@
         }
       ],
       "module": {
-        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/knowledge-base-0.8.1.wasm",
-        "sha256": "3d9444187a8c228a7746015d215209c250be116f7a2389a67692923434b0ebc2",
-        "size": 628926
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/knowledge-base-0.8.2.wasm",
+        "sha256": "01a2f82d59c88ce746e55a92bb9082778a3c9cedd174f1e7730a0f2df10016cb",
+        "size": 635601
       }
     },
     {
