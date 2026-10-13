@@ -1,6 +1,6 @@
 {
   "apiVersion": 1,
-  "updated": "2026-10-08T14:07:54Z",
+  "updated": "2026-10-13T09:09:12Z",
   "plugins": [
     {
       "id": "agent-rest-client",
@@ -108,6 +108,290 @@
         "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/hello-rust-0.1.0.wasm",
         "sha256": "0971ff59c2d75fb4b59cfbd80c3aa8fe31d0a99db81357feceba3511a9b0789f",
         "size": 97392
+      }
+    },
+    {
+      "id": "knowledge-base",
+      "name": "Knowledge Base",
+      "version": "0.8.1",
+      "publisher": "Agentty",
+      "description": "Knowledge graph of repos: API flowcharts, tables, docs, kb_* tools for Claude Code and Codex. terminal.write, prompt.inject: start its local server agentty-kb, installed from agentty-kb-releases if missing. net.request: only that server on 127.0.0.1. workspace.read, session.read: sent only there.",
+      "icon": "network",
+      "license": "Proprietary",
+      "official": true,
+      "source": "https://github.com/empty-user77/agentty-knowledge-base",
+      "homepage": "https://github.com/empty-user77/agentty-kb-releases",
+      "keywords": [
+        "knowledge graph",
+        "code search",
+        "flowchart",
+        "trace",
+        "kotlin",
+        "spring"
+      ],
+      "apiVersion": 5,
+      "surface": "pane",
+      "mode": "push",
+      "permissions": [
+        "mcp.tools",
+        "net.request",
+        "prompt.inject",
+        "session.read",
+        "terminal.write",
+        "workspace.read"
+      ],
+      "agents": [
+        "claude",
+        "codex"
+      ],
+      "activationEvents": [
+        "onStartup"
+      ],
+      "tools": [
+        {
+          "name": "kb_overview",
+          "description": "The big picture first: the repositories, the services in them, and how services depend on each other (HTTP calls, events, shared tables), each with the API, topic or table behind it. Use it to find which service or repository to look in before searching.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_search",
+          "description": "Find nodes in the code knowledge graph (APIs, pages, symbols, DTOs, tables, docs, tickets) by name, route, path or keyword, ranked. Use this first when you only have a word, endpoint, class or table name and need the node id that the other kb_* tools take. Returns id, kind, name, file:line and score per hit.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "Name, route, path or keyword to look for."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "service",
+                  "api",
+                  "symbol",
+                  "dto",
+                  "page",
+                  "table",
+                  "column",
+                  "topic",
+                  "jira",
+                  "doc",
+                  "commit",
+                  "test",
+                  "config"
+                ],
+                "description": "Only nodes of this kind."
+              },
+              "repo": {
+                "type": "string",
+                "description": "Only nodes of this repository (a hub with several repositories). Names come from kb_overview."
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "Maximum hits (default 10)."
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_flow",
+          "description": "Start here for any question about what an API or page does end to end. Follows an api: or page: node through controller, services, DTOs, queries and tables and returns the whole flow with a confidence and evidence tier for every link. Cheaper and more complete than reading files one by one. Take the id from kb_search.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id of an api: or page: node."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_neighbors",
+          "description": "List what is directly connected to a node (callers, callees, reads and writes, DTOs, tests, docs, tickets), one to four hops out, optionally limited to some edge kinds and a direction. Use it to look around a symbol, DTO, table or column when kb_flow does not apply.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id."
+              },
+              "kinds": {
+                "type": "string",
+                "description": "Comma-separated edge kinds to follow, e.g. calls,reads,writes. Default: all."
+              },
+              "dir": {
+                "type": "string",
+                "enum": [
+                  "out",
+                  "in",
+                  "both"
+                ],
+                "description": "Edge direction (default both)."
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4,
+                "description": "Hops (default 1)."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_impact",
+          "description": "Impact analysis: everything that depends on a node and would be affected if it changed, out to a given depth, with confidence per link. Use it before editing a symbol, DTO, column or table, and to scope tests and reviews.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id of what is about to change."
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8,
+                "description": "How far to follow dependents (default 4)."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_path",
+          "description": "Find the strongest known connection between two nodes (for example a page and a table) and its overall confidence. Use it to answer how X reaches Y. Returns an empty result when the graph knows no path.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "Node id to start from."
+              },
+              "to": {
+                "type": "string",
+                "description": "Node id to reach."
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_card",
+          "description": "Read the short markdown card of one node: what it is, where it lives, key attributes and links. A cheap overview before opening the source file.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_context",
+          "description": "For how-it-works and policy questions (\"what is the point earning policy\", \"how are refunds paid\"): the team's knowledge notes, the document sections that describe it, the code with its comments and the rules it enforces (file:line), its constants and tables, in one pack. Answer from it and cite what you use.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "description": "The question, in any language."
+              }
+            },
+            "required": [
+              "question"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_brief",
+          "description": "Complete lists, never cut off: for an API, page, event or function the tables it writes and reads, the events it publishes and their handlers, the services it goes through and the entry points that reach it; for a table, every endpoint that writes or reads it.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Node id, or its name: `POST /api/v1/orders`, `/checkout`, `point_history`, `OrderService.placeOrder`."
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "readOnly": true
+        },
+        {
+          "name": "kb_changes",
+          "description": "After editing, before you finish: what your uncommitted changes reach that you did not change — callers, the APIs, pages and jobs that run the code, every other writer of the tables involved, docs, tests, and other places that still hold a value you replaced. Check every item.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        {
+          "name": "kb_ask",
+          "description": "Ask a natural-language question that agentty-kb answers with its own parallel agents: claims graded confirmed, likely or guess, each with file:line evidence, plus what could not be found. Slow (seconds to minutes), so use it only when kb_search, kb_flow and the other kb_* tools cannot answer a cross-cutting question. mode is quick, standard or deep. If the answer says status running, call kb_ask again with the job to keep waiting.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "description": "The question, in plain language."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "quick",
+                  "standard",
+                  "deep"
+                ],
+                "description": "Effort (default standard)."
+              },
+              "job": {
+                "type": "string",
+                "description": "A job id returned earlier by a still-running kb_ask; waits for it instead of asking again."
+              }
+            }
+          },
+          "readOnly": false
+        }
+      ],
+      "module": {
+        "url": "https://raw.githubusercontent.com/empty-user77/Agentty-Marketplace/main/modules/knowledge-base-0.8.1.wasm",
+        "sha256": "3d9444187a8c228a7746015d215209c250be116f7a2389a67692923434b0ebc2",
+        "size": 628926
       }
     },
     {
